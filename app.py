@@ -1,51 +1,68 @@
-# ja ja
 import paho.mqtt.client as mqtt
 import socket
 import threading
 
-# Konfigurationen
-MQTT_BROKER = 'mqtt.example.com'
+# MQTT-Konfigurationsparameter
+MQTT_BROKER = "loxberry"
 MQTT_PORT = 1883
-MQTT_TOPIC = 'test/topic'
-UDP_IP = '127.0.0.1'
+MQTT_TOPIC = "test/topic"
+
+# UDP-Konfigurationsparameter
+UDP_IP = "127.0.0.1"
 UDP_PORT = 5005
 
-# UDP Socket erstellen
-udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+# Variable zur Verfolgung der gesendeten Nachrichten
+sent_messages = set()
+
+# Funktion zum Senden von Nachrichten an das UDP-Ziel
+def send_udp_message(message):
+    # Nachricht nur senden, wenn sie noch nicht gesendet wurde
+    if message not in sent_messages:
+        sent_messages.add(message)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(message.encode(), (UDP_IP, UDP_PORT))
+        print(f"UDP Nachricht gesendet: {message}")
 
 # Callback, wenn eine MQTT-Nachricht empfangen wird
-def on_mqtt_message(client, userdata, msg):
-    print(f"MQTT empfangen: {msg.topic} {msg.payload}")
-    # MQTT Nachricht an UDP senden
-    udp_sock.sendto(msg.payload, (UDP_IP, UDP_PORT))
+def on_message(client, userdata, msg):
+    message = msg.payload.decode()
+    print(f"MQTT Nachricht empfangen: {message}")
+    send_udp_message(message)
 
-# MQTT-Client initialisieren und verbinden
-def init_mqtt_client():
+# MQTT-Verbindung und Abonnieren des Themas
+def mqtt_to_udp():
     client = mqtt.Client()
-    client.on_message = on_mqtt_message
+    client.on_message = on_message
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
     client.subscribe(MQTT_TOPIC)
-    return client
+    client.loop_forever()
 
-# Funktion zum Empfangen von UDP-Nachrichten und Senden an MQTT
+# UDP-Empfang und Nachricht an MQTT senden
 def udp_to_mqtt(client):
-    udp_sock.bind((UDP_IP, UDP_PORT))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((UDP_IP, UDP_PORT))
     while True:
-        data, addr = udp_sock.recvfrom(1024)
-        print(f"UDP empfangen: {data} von {addr}")
-        client.publish(MQTT_TOPIC, data)
+        data, addr = sock.recvfrom(1024)
+        message = data.decode()
+        print(f"UDP Nachricht empfangen: {message}")
+        client.publish(MQTT_TOPIC, message)
 
-# Main-Funktion
+# Hauptfunktion
 def main():
-    # MQTT-Client starten
-    mqtt_client = init_mqtt_client()
+    client = mqtt.Client()
+    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.loop_start()
 
-    # Thread für UDP zu MQTT starten
-    udp_thread = threading.Thread(target=udp_to_mqtt, args=(mqtt_client,))
+    # Thread für MQTT -> UDP
+    mqtt_thread = threading.Thread(target=mqtt_to_udp)
+    mqtt_thread.start()
+
+    # Thread für UDP -> MQTT
+    udp_thread = threading.Thread(target=udp_to_mqtt, args=(client,))
     udp_thread.start()
 
-    # MQTT-Client-Schleife starten
-    mqtt_client.loop_forever()
+    mqtt_thread.join()
+    udp_thread.join()
 
 if __name__ == "__main__":
     main()
