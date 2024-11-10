@@ -1,0 +1,38 @@
+# Virtuelle Umgebungen
+venv/
+.venv/
+env/
+.env/
+
+# Byte-compiled Dateien
+__pycache__/
+*.py[cod]
+
+# Distribution/Packaging
+*.egg
+*.egg-info/
+dist/
+build/
+*.egg-info/
+
+# Log-Dateien
+*.log
+
+# IDE spezifische Dateien
+.vscode/
+.idea/
+
+# Unit Test Coverage Reports
+htmlcov/
+.tox/
+coverage.*
+.cache
+pytest_cache/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# Sonstiges
+*.swp
+.DS_Store
+*.pyo
