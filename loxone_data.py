@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urlparse, urlunparse
 
 
 @dataclass
@@ -16,6 +18,7 @@ class LoxoneDataSource:
     username: Optional[str] = None
     password: Optional[str] = None
     json_path: Optional[Path] = None
+    state_url_template: Optional[str] = None
 
     @property
     def auth(self) -> Optional[Tuple[str, str]]:
@@ -38,11 +41,20 @@ class LoxoneDataSource:
 
         path_value = os.getenv("LOXONE_JSON_PATH", "json.txt")
         json_path = Path(path_value) if path_value else None
+        url = os.getenv("LOXONE_URL") or None
+        template = os.getenv("LOXONE_STATE_URL_TEMPLATE") or None
+        if not template and url:
+            parsed = urlparse(url)
+            if parsed.scheme and parsed.netloc:
+                base = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+                template = f"{base}/dev/sps/io/{{uuid}}"
+
         return cls(
-            url=os.getenv("LOXONE_URL") or None,
+            url=url,
             username=os.getenv("LOXONE_USERNAME") or None,
             password=os.getenv("LOXONE_PASSWORD") or None,
             json_path=json_path,
+            state_url_template=template,
         )
 
 
@@ -66,6 +78,7 @@ class LoxoneDataFetcher:
     def __init__(self, source: LoxoneDataSource, timeout: float = 10.0):
         self.source = source
         self.timeout = timeout
+        self._state_cache: Dict[str, Optional[str]] = {}
 
     def load(self) -> Dict[str, Any]:
         """Load JSON data either from the configured URL or the local file."""
@@ -95,6 +108,61 @@ class LoxoneDataFetcher:
 
         with path.open(encoding="utf-8") as handle:
             return json.load(handle)
+
+    def resolve_state_value(self, candidate: str) -> Optional[str]:
+        """Resolve a state UUID to its current value using the Miniserver API."""
+
+        if not candidate or not isinstance(candidate, str):
+            return None
+
+        if candidate in self._state_cache:
+            return self._state_cache[candidate]
+
+        template = self.source.state_url_template
+        if not template or not _UUID_PATTERN.fullmatch(candidate):
+            self._state_cache[candidate] = None
+            return None
+
+        try:
+            import requests  # type: ignore
+        except ModuleNotFoundError:
+            self._state_cache[candidate] = None
+            return None
+
+        url = template.format(uuid=candidate)
+        try:
+            response = requests.get(
+                url,
+                auth=self.source.auth,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except Exception:
+            self._state_cache[candidate] = None
+            return None
+
+        value: Any
+        try:
+            data = response.json()
+        except ValueError:
+            value = response.text.strip()
+        else:
+            if isinstance(data, dict):
+                for key in ("value", "val", "state"):
+                    if key in data:
+                        value = data[key]
+                        break
+                else:
+                    value = data
+            else:
+                value = data
+
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False)
+
+        resolved = str(value)
+        self._state_cache[candidate] = resolved
+        return resolved
 
     @staticmethod
     def extract_controls(data: Dict[str, Any]) -> List[ControlRow]:
@@ -151,3 +219,6 @@ def _stringify(value: Any) -> str:
         inner = ", ".join(f"{_stringify(k)}: {_stringify(v)}" for k, v in value.items())
         return f"{{{inner}}}"
     return str(value)
+
+
+_UUID_PATTERN = re.compile(r"[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}")
