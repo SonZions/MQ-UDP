@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Standardkommando: Anwendung starten
-ENTRYPOINT ["python", "app.py"]
+ENTRYPOINT ["python", "web_app.py"]
