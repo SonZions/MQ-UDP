@@ -43,6 +43,14 @@ sys.modules["paho.mqtt.client"] = client_module
 
 import app
 
+TEST_CONFIG = app.Config(
+    mqtt_broker="broker",
+    mqtt_port=1883,
+    mqtt_topic="topic",
+    udp_ip="127.0.0.1",
+    udp_port=5005,
+)
+
 
 def setup_function(function):
     app.sent_messages.clear()
@@ -52,14 +60,14 @@ def test_send_udp_message_sends_only_once():
     with patch.object(app.socket, "socket") as mock_socket:
         socket_instance = mock_socket.return_value
 
-        app.send_udp_message("hello")
+        app.send_udp_message("hello", TEST_CONFIG)
 
         socket_instance.sendto.assert_called_once_with(
-            "hello".encode(), (app.UDP_IP, app.UDP_PORT)
+            "hello".encode(), (TEST_CONFIG.udp_ip, TEST_CONFIG.udp_port)
         )
         assert "hello" in app.sent_messages
 
-        app.send_udp_message("hello")
+        app.send_udp_message("hello", TEST_CONFIG)
 
         socket_instance.sendto.assert_called_once()
 
@@ -68,6 +76,8 @@ def test_on_message_forwards_payload_to_udp():
     with patch("app.send_udp_message") as mock_send_udp_message:
         mqtt_message = types.SimpleNamespace(payload=b"payload")
 
-        app.on_message(client=MagicMock(), userdata=None, msg=mqtt_message)
+        on_message = app.create_on_message(TEST_CONFIG)
 
-        mock_send_udp_message.assert_called_once_with("payload")
+        on_message(client=MagicMock(), userdata=None, msg=mqtt_message)
+
+        mock_send_udp_message.assert_called_once_with("payload", TEST_CONFIG)
