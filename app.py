@@ -3,8 +3,9 @@ import os
 import socket
 import threading
 import time
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -34,6 +35,40 @@ class Config:
 # Variable zur Verfolgung der gesendeten Nachrichten
 sent_messages = set()
 
+# Interne Ablage für Nachrichten, die lokal auf dem MQTT-Broker veröffentlicht
+# wurden und daher nicht erneut verarbeitet werden sollen.
+_published_messages: Dict[str, int] = defaultdict(int)
+_published_lock = threading.Lock()
+
+
+def reset_message_tracking() -> None:
+    """Reset cached message tracking state (hauptsächlich für Tests)."""
+
+    sent_messages.clear()
+    with _published_lock:
+        _published_messages.clear()
+
+
+def record_local_mqtt_message(message: str) -> None:
+    """Merke, dass eine Nachricht von dieser Anwendung veröffentlicht wurde."""
+
+    with _published_lock:
+        _published_messages[message] += 1
+
+
+def should_ignore_mqtt_message(message: str) -> bool:
+    """Prüfe, ob eine eingehende MQTT-Nachricht ignoriert werden sollte."""
+
+    with _published_lock:
+        count = _published_messages.get(message, 0)
+        if not count:
+            return False
+        if count == 1:
+            _published_messages.pop(message, None)
+        else:
+            _published_messages[message] = count - 1
+        return True
+
 
 def create_mqtt_client(config: Config) -> mqtt.Client:
     client = mqtt.Client()
@@ -57,6 +92,8 @@ def create_on_message(config: Config):
     def on_message(client, userdata, msg):
         message = msg.payload.decode()
         print(f"MQTT Nachricht empfangen: {message}")
+        if should_ignore_mqtt_message(message):
+            return
         send_udp_message(message, config)
 
     return on_message
@@ -76,6 +113,7 @@ def udp_to_mqtt(client: mqtt.Client, config: Config) -> None:
         data, addr = sock.recvfrom(1024)
         message = data.decode()
         print(f"UDP Nachricht empfangen: {message}")
+        record_local_mqtt_message(message)
         client.publish(config.mqtt_topic, message)
 
 
@@ -209,6 +247,7 @@ def automatic_mode(
                         continue
                     message = format_control_message(control, fetcher.resolve_state_value)
                     topic = resolve_target_topic(config.mqtt_topic, uuid)
+                    record_local_mqtt_message(message)
                     client.publish(topic, message)
                 fetch_failures = 0
             except Exception as exc:  # pragma: no cover - defensive logging only

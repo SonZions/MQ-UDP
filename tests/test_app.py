@@ -55,7 +55,7 @@ TEST_CONFIG = app.Config(
 
 
 def setup_function(function):
-    app.sent_messages.clear()
+    app.reset_message_tracking()
 
 
 def test_send_udp_message_sends_only_once():
@@ -83,6 +83,19 @@ def test_on_message_forwards_payload_to_udp():
         on_message(client=MagicMock(), userdata=None, msg=mqtt_message)
 
         mock_send_udp_message.assert_called_once_with("payload", TEST_CONFIG)
+
+
+def test_on_message_ignores_locally_published_messages():
+    app.record_local_mqtt_message("payload")
+
+    with patch("app.send_udp_message") as mock_send_udp_message:
+        mqtt_message = types.SimpleNamespace(payload=b"payload")
+
+        on_message = app.create_on_message(TEST_CONFIG)
+
+        on_message(client=MagicMock(), userdata=None, msg=mqtt_message)
+
+        mock_send_udp_message.assert_not_called()
 
 
 def test_format_control_message_uses_state_resolver():
