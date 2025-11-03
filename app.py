@@ -1,10 +1,22 @@
 import argparse
-from dataclasses import dataclass
+import os
 import socket
 import threading
-from typing import Optional
+import time
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 import paho.mqtt.client as mqtt
+
+from loxone_data import ControlRow, LoxoneDataFetcher
+
+try:  # pragma: no cover - optional dependency for logging
+    from typing import TYPE_CHECKING
+except ImportError:  # pragma: no cover - Python < 3.8 compatibility guard
+    TYPE_CHECKING = False
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from auto_config import AutoConfigStore
 
 
 @dataclass
@@ -16,6 +28,7 @@ class Config:
     udp_port: int
     mqtt_username: Optional[str] = None
     mqtt_password: Optional[str] = None
+    automatic_interval: float = 30.0
 
 
 # Variable zur Verfolgung der gesendeten Nachrichten
@@ -81,6 +94,12 @@ def parse_args(argv=None) -> Config:
     )
     parser.add_argument("--mqtt-username", help="MQTT Benutzername", default=None)
     parser.add_argument("--mqtt-password", help="MQTT Passwort", default=None)
+    parser.add_argument(
+        "--automatic-interval",
+        type=float,
+        default=30.0,
+        help="Intervall in Sekunden für den Automatikmodus (Standard: 30)",
+    )
 
     args = parser.parse_args(argv)
     return Config(
@@ -91,7 +110,90 @@ def parse_args(argv=None) -> Config:
         udp_port=args.udp_port,
         mqtt_username=args.mqtt_username,
         mqtt_password=args.mqtt_password,
+        automatic_interval=args.automatic_interval,
     )
+
+
+def config_from_env() -> Config:
+    """Build the bridge configuration based on environment variables."""
+
+    broker = os.getenv("MQTT_BROKER")
+    topic = os.getenv("MQTT_TOPIC")
+    if not broker or not topic:
+        raise ValueError("MQTT_BROKER und MQTT_TOPIC müssen gesetzt sein")
+
+    mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
+    udp_ip = os.getenv("UDP_IP", "127.0.0.1")
+    udp_port = int(os.getenv("UDP_PORT", "5005"))
+    automatic_interval = float(os.getenv("AUTOMATIC_INTERVAL", "30"))
+
+    return Config(
+        mqtt_broker=broker,
+        mqtt_port=mqtt_port,
+        mqtt_topic=topic,
+        udp_ip=udp_ip,
+        udp_port=udp_port,
+        mqtt_username=os.getenv("MQTT_USERNAME") or None,
+        mqtt_password=os.getenv("MQTT_PASSWORD") or None,
+        automatic_interval=automatic_interval,
+    )
+
+
+def format_control_message(control: ControlRow) -> str:
+    """Render a MQTT friendly payload for a control."""
+
+    if control.states:
+        values = " | ".join(f"{key}: {value}" for key, value in control.states)
+    elif control.details:
+        values = " | ".join(f"{key}: {value}" for key, value in control.details)
+    else:
+        values = "Keine Daten verfügbar"
+    return f"{control.name} – {values}"
+
+
+def automatic_mode(
+    config: Config,
+    store: "AutoConfigStore",
+    fetcher_factory: Callable[[], LoxoneDataFetcher],
+    *,
+    interval_override: Optional[float] = None,
+) -> None:
+    """Publish selected control values to MQTT based on the stored configuration."""
+
+    client = create_mqtt_client(config)
+    client.loop_start()
+    fetch_failures = 0
+    try:
+        while True:
+            enabled = store.enabled_ids()
+            if not enabled:
+                time.sleep(interval_override or config.automatic_interval)
+                continue
+
+            try:
+                fetcher = fetcher_factory()
+                payload = fetcher.load()
+                controls = {
+                    row.uuid: row
+                    for row in LoxoneDataFetcher.extract_controls(payload)
+                }
+                store.sync_from(controls.keys())
+                for uuid in enabled:
+                    control = controls.get(uuid)
+                    if not control:
+                        continue
+                    message = format_control_message(control)
+                    topic = f"{config.mqtt_topic}/{uuid}"
+                    client.publish(topic, message)
+                fetch_failures = 0
+            except Exception as exc:  # pragma: no cover - defensive logging only
+                fetch_failures += 1
+                print(f"Automatikmodus Fehler ({fetch_failures}): {exc}")
+
+            time.sleep(interval_override or config.automatic_interval)
+    finally:
+        client.loop_stop()
+        client.disconnect()
 
 
 def main(argv=None) -> None:
