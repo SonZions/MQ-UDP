@@ -161,6 +161,21 @@ def format_control_message(
     return f"{control.name} – {values}"
 
 
+def resolve_target_topic(base: str, uuid: str) -> str:
+    """Derive the target MQTT topic for an automatically published control."""
+
+    if "{uuid}" in base:
+        try:
+            return base.format(uuid=uuid)
+        except Exception:
+            return base
+
+    if base.endswith("/"):
+        return f"{base}{uuid}"
+
+    return base
+
+
 def automatic_mode(
     config: Config,
     store: "AutoConfigStore",
@@ -193,7 +208,7 @@ def automatic_mode(
                     if not control:
                         continue
                     message = format_control_message(control, fetcher.resolve_state_value)
-                    topic = f"{config.mqtt_topic}/{uuid}"
+                    topic = resolve_target_topic(config.mqtt_topic, uuid)
                     client.publish(topic, message)
                 fetch_failures = 0
             except Exception as exc:  # pragma: no cover - defensive logging only

@@ -145,22 +145,16 @@ class LoxoneDataFetcher:
         try:
             data = response.json()
         except ValueError:
-            value = response.text.strip()
+            extracted: Any = response.text.strip()
         else:
-            if isinstance(data, dict):
-                for key in ("value", "val", "state"):
-                    if key in data:
-                        value = data[key]
-                        break
-                else:
-                    value = data
-            else:
-                value = data
+            extracted = _extract_state_payload(data)
+            if extracted is None:
+                extracted = response.text.strip()
 
-        if isinstance(value, (dict, list)):
-            value = json.dumps(value, ensure_ascii=False)
+        if isinstance(extracted, (dict, list)):
+            extracted = json.dumps(extracted, ensure_ascii=False)
 
-        resolved = str(value)
+        resolved = str(extracted)
         self._state_cache[candidate] = resolved
         return resolved
 
@@ -198,6 +192,38 @@ def _build_lookup(entries: Dict[str, Dict[str, Any]], default_label: str) -> Dic
         name = payload.get("name") if isinstance(payload, dict) else None
         lookup[key] = str(name) if name is not None else default_label
     return lookup
+
+
+def _extract_state_payload(payload: Any) -> Optional[Any]:
+    """Extract the scalar value from a Loxone state response payload."""
+
+    if isinstance(payload, dict):
+        for key in ("value", "val", "state"):
+            if key in payload:
+                candidate = payload[key]
+                if isinstance(candidate, (dict, list)):
+                    return _extract_state_payload(candidate)
+                return candidate
+
+        nested = payload.get("LL")
+        if nested is not None:
+            return _extract_state_payload(nested)
+
+        # Fall back to the first scalar entry in the dict, if any.
+        for item in payload.values():
+            result = _extract_state_payload(item)
+            if result is not None:
+                return result
+        return payload
+
+    if isinstance(payload, (list, tuple)):
+        for item in payload:
+            result = _extract_state_payload(item)
+            if result is not None:
+                return result
+        return payload
+
+    return payload
 
 
 def _flatten_mapping(mapping: Optional[Dict[str, Any]]) -> Tuple[Tuple[str, str], ...]:

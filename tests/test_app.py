@@ -103,3 +103,17 @@ def test_format_control_message_uses_state_resolver():
     message = app.format_control_message(control, resolver)
 
     assert message.endswith("value: 43")
+
+
+def test_resolve_target_topic_defaults_to_base():
+    assert app.resolve_target_topic("awtrix/device/custom", "uuid") == "awtrix/device/custom"
+
+
+def test_resolve_target_topic_formats_placeholder():
+    topic = app.resolve_target_topic("bridge/{uuid}/state", "abc-123")
+    assert topic == "bridge/abc-123/state"
+
+
+def test_resolve_target_topic_appends_on_trailing_slash():
+    topic = app.resolve_target_topic("sensors/", "xyz")
+    assert topic == "sensors/xyz"

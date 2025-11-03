@@ -110,3 +110,24 @@ def test_resolve_state_value_fetches_and_caches(monkeypatch):
         auth=source.auth,
         timeout=fetcher.timeout,
     )
+
+
+def test_resolve_state_value_handles_ll_payload(monkeypatch):
+    source = LoxoneDataSource(state_url_template="http://host/dev/sps/io/{uuid}")
+    fetcher = LoxoneDataFetcher(source)
+
+    response = MagicMock()
+    response.json.return_value = {"LL": {"value": 72.5, "Code": 200}}
+    response.text = "{\"LL\":{\"value\":72.5}}"
+    response.raise_for_status.return_value = None
+
+    mock_requests = MagicMock()
+    mock_requests.get.return_value = response
+
+    monkeypatch.setitem(sys.modules, "requests", mock_requests)
+
+    uuid = "89abcdef-0123-4567-89ab-cdef01234567"
+
+    result = fetcher.resolve_state_value(uuid)
+
+    assert result == "72.5"
