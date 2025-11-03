@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 import types
@@ -115,11 +116,28 @@ def test_format_control_message_uses_state_resolver():
 
     message = app.format_control_message(control, resolver)
 
-    assert message.endswith("value: 43")
+    assert json.loads(message) == {"text": "Sensor 43"}
+
+
+def test_format_control_message_falls_back_to_details():
+    control = ControlRow(
+        uuid="uuid-2",
+        name="Info",
+        type="Text",
+        room="",
+        category="",
+        details=(("status", "aktiv"),),
+        states=tuple(),
+        links=tuple(),
+    )
+
+    message = app.format_control_message(control, None)
+
+    assert json.loads(message) == {"text": "Info status: aktiv"}
 
 
 def test_resolve_target_topic_defaults_to_base():
-    assert app.resolve_target_topic("awtrix/device/custom", "uuid") == "awtrix/device/custom"
+    assert app.resolve_target_topic("awtrix/device/custom", "uuid") == "awtrix/device/custom/uuid"
 
 
 def test_resolve_target_topic_formats_placeholder():
@@ -130,3 +148,59 @@ def test_resolve_target_topic_formats_placeholder():
 def test_resolve_target_topic_appends_on_trailing_slash():
     topic = app.resolve_target_topic("sensors/", "xyz")
     assert topic == "sensors/xyz"
+
+
+def test_automatic_mode_publishes_clear_message_when_disabled(monkeypatch):
+    config = app.Config(
+        mqtt_broker="broker",
+        mqtt_port=1883,
+        mqtt_topic="awtrix/device/custom",
+        udp_ip="127.0.0.1",
+        udp_port=5005,
+    )
+
+    payload = {
+        "controls": {
+            "uuid-123": {
+                "name": "Speichertemperatur",
+                "type": "InfoOnlyAnalog",
+                "room": "",
+                "cat": "",
+                "states": {"value": "state-uuid"},
+                "links": [],
+            }
+        },
+        "rooms": {},
+        "cats": {},
+    }
+
+    fetcher = MagicMock()
+    fetcher.load.return_value = payload
+    fetcher.resolve_state_value.return_value = "59°"
+    fetcher_factory = MagicMock(return_value=fetcher)
+
+    store = MagicMock()
+    store.enabled_ids.side_effect = [
+        {"uuid-123"},
+        set(),
+        KeyboardInterrupt(),
+    ]
+    store.sync_from.return_value = None
+
+    client = MagicMock()
+    monkeypatch.setattr(app, "create_mqtt_client", lambda *_: client)
+
+    try:
+        app.automatic_mode(
+            config,
+            store,
+            fetcher_factory,
+            interval_override=0.0,
+        )
+    except KeyboardInterrupt:
+        pass
+
+    topics_messages = [call.args for call in client.publish.call_args_list]
+
+    assert ("awtrix/device/custom/uuid-123", json.dumps({"text": "Speichertemperatur 59°"}, ensure_ascii=False)) in topics_messages
+    assert ("awtrix/device/custom/uuid-123", "{}") in topics_messages

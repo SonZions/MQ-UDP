@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import socket
@@ -6,7 +7,7 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Set
 
 import paho.mqtt.client as mqtt
 
@@ -195,22 +196,36 @@ def format_control_message(
     control: ControlRow,
     state_resolver: Optional[Callable[[str], Optional[str]]] = None,
 ) -> str:
-    """Render a MQTT friendly payload for a control."""
+    """Render an AWTRIX compatible payload for a control."""
 
+    values = []
     if control.states:
-        rendered = []
-        for key, value in control.states:
-            if state_resolver:
-                resolved = state_resolver(value)
-                if resolved is not None:
-                    value = resolved
-            rendered.append(f"{key}: {value}")
-        values = " | ".join(rendered)
+        for _key, raw_value in control.states:
+            resolved = state_resolver(raw_value) if state_resolver else None
+            candidate = resolved if resolved is not None else raw_value
+            if candidate:
+                values.append(str(candidate).strip())
     elif control.details:
-        values = " | ".join(f"{key}: {value}" for key, value in control.details)
+        for key, value in control.details:
+            text = f"{key}: {value}".strip()
+            if text:
+                values.append(text)
+
+    if not values:
+        values.append("Keine Daten verfügbar")
+
+    label = control.name.strip()
+    value_text = " ".join(filter(None, values)).strip()
+
+    if label and value_text:
+        text = f"{label} {value_text}".strip()
+    elif label:
+        text = label
     else:
-        values = "Keine Daten verfügbar"
-    return f"{control.name} – {values}"
+        text = value_text or "Keine Daten verfügbar"
+
+    payload = {"text": text}
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def resolve_target_topic(base: str, uuid: str) -> str:
@@ -225,7 +240,7 @@ def resolve_target_topic(base: str, uuid: str) -> str:
     if base.endswith("/"):
         return f"{base}{uuid}"
 
-    return base
+    return f"{base}/{uuid}" if uuid else base
 
 
 def automatic_mode(
@@ -240,10 +255,23 @@ def automatic_mode(
     client = create_mqtt_client(config)
     client.loop_start()
     fetch_failures = 0
+    previous_enabled: Set[str] = set()
     try:
         while True:
             enabled = store.enabled_ids()
+            disabled = previous_enabled - enabled
+            if disabled:
+                for uuid in disabled:
+                    topic = resolve_target_topic(config.mqtt_topic, uuid)
+                    empty_payload = "{}"
+                    record_local_mqtt_message(empty_payload)
+                    client.publish(topic, empty_payload)
+                    logger.info(
+                        "Automatikmodus setzte Nachricht zurück – Topic: %s", topic
+                    )
+
             if not enabled:
+                previous_enabled = enabled
                 time.sleep(interval_override or config.automatic_interval)
                 continue
 
@@ -269,6 +297,7 @@ def automatic_mode(
                         message,
                     )
                 fetch_failures = 0
+                previous_enabled = enabled
             except Exception as exc:  # pragma: no cover - defensive logging only
                 fetch_failures += 1
                 print(f"Automatikmodus Fehler ({fetch_failures}): {exc}")
