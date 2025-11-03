@@ -37,7 +37,7 @@ alle Werte der `LoxAPP3.json` in einer tabellarischen Weboberfläche darstellt.
 
 ```bash
 pip install -r requirements.txt
-uvicorn web_app:app --reload
+python web_app.py --reload
 ```
 
 Standardmäßig wird die Beispieldatei `json.txt` aus dem Repository verwendet.
@@ -48,4 +48,13 @@ Umgebungsvariablen gesetzt werden:
 - `LOXONE_USERNAME` / `LOXONE_PASSWORD`: Zugangsdaten für Basic Auth
 - `LOXONE_JSON_PATH`: Pfad zu einer lokalen JSON-Datei (optional, Standard: `json.txt`)
 
-Nach dem Start ist die Tabelle unter <http://localhost:8000/> erreichbar.
+Der Host und Port können über Argumente oder Umgebungsvariablen angepasst werden:
+
+```bash
+python web_app.py --host 0.0.0.0 --port 9000
+# oder per Umgebungsvariablen
+WEBAPP_HOST=0.0.0.0 WEBAPP_PORT=9000 python web_app.py
+```
+
+Nach dem Start ist die Tabelle unter <http://HOST:PORT/> erreichbar (Standard:
+<http://localhost:8000/>).

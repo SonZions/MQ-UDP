@@ -1,6 +1,8 @@
 """FastAPI application that renders the Loxone values as a HTML table."""
 from __future__ import annotations
 
+import argparse
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict
@@ -8,6 +10,7 @@ from typing import Dict
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+import uvicorn
 
 try:  # pragma: no cover - optional dependency for HTTP access
     import requests
@@ -55,3 +58,46 @@ def render_controls(
             "metadata": metadata,
         },
     )
+
+
+def _default_host() -> str:
+    return os.getenv("WEBAPP_HOST", "0.0.0.0")
+
+
+def _default_port() -> int:
+    try:
+        return int(os.getenv("WEBAPP_PORT", "8000"))
+    except ValueError:  # pragma: no cover - defensive programming for user input
+        raise ValueError("WEBAPP_PORT muss eine ganze Zahl sein")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Starte die Loxone Webansicht.")
+    parser.add_argument(
+        "--host",
+        default=_default_host(),
+        help="Host, auf dem der Server lauschen soll (Standard: %(default)s)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=_default_port(),
+        help="Port, auf dem der Server lauschen soll (Standard: %(default)s)",
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Aktiviere Uvicorn Reload-Modus (nur für Entwicklung)",
+    )
+    args = parser.parse_args()
+
+    uvicorn.run(
+        "web_app:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    main()
