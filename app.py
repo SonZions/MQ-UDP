@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import socket
 import threading
@@ -10,6 +11,9 @@ from typing import Callable, Dict, Optional
 import paho.mqtt.client as mqtt
 
 from loxone_data import ControlRow, LoxoneDataFetcher
+
+
+logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency for logging
     from typing import TYPE_CHECKING
@@ -85,6 +89,11 @@ def send_udp_message(message: str, config: Config) -> None:
         sent_messages.add(message)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.sendto(message.encode(), (config.udp_ip, config.udp_port))
+        logger.info(
+            "Weitergeleitete MQTT-Nachricht – Topic: %s, Nachricht: %s",
+            config.mqtt_topic,
+            message,
+        )
         print(f"UDP Nachricht gesendet: {message}")
 
 
@@ -115,6 +124,11 @@ def udp_to_mqtt(client: mqtt.Client, config: Config) -> None:
         print(f"UDP Nachricht empfangen: {message}")
         record_local_mqtt_message(message)
         client.publish(config.mqtt_topic, message)
+        logger.info(
+            "Veröffentlichte UDP-Nachricht – Topic: %s, Nachricht: %s",
+            config.mqtt_topic,
+            message,
+        )
 
 
 def parse_args(argv=None) -> Config:
@@ -249,6 +263,11 @@ def automatic_mode(
                     topic = resolve_target_topic(config.mqtt_topic, uuid)
                     record_local_mqtt_message(message)
                     client.publish(topic, message)
+                    logger.info(
+                        "Automatikmodus veröffentlichte Nachricht – Topic: %s, Nachricht: %s",
+                        topic,
+                        message,
+                    )
                 fetch_failures = 0
             except Exception as exc:  # pragma: no cover - defensive logging only
                 fetch_failures += 1
