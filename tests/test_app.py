@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 # Füge den Projektstamm zum Python-Pfad hinzu
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from loxone_data import ControlRow
+
 # Erstelle Dummy-Module für paho.mqtt.client, damit die Tests ohne externe Abhängigkeiten laufen
 paho_module = types.ModuleType("paho")
 paho_module.__path__ = []
@@ -81,3 +83,37 @@ def test_on_message_forwards_payload_to_udp():
         on_message(client=MagicMock(), userdata=None, msg=mqtt_message)
 
         mock_send_udp_message.assert_called_once_with("payload", TEST_CONFIG)
+
+
+def test_format_control_message_uses_state_resolver():
+    control = ControlRow(
+        uuid="uuid-1",
+        name="Sensor",
+        type="InfoOnlyDigital",
+        room="",
+        category="",
+        details=tuple(),
+        states=(("value", "01234567-89ab-cdef-0123-456789abcdef"),),
+        links=tuple(),
+    )
+
+    def resolver(candidate: str) -> str:
+        return "43" if candidate.startswith("0123") else None
+
+    message = app.format_control_message(control, resolver)
+
+    assert message.endswith("value: 43")
+
+
+def test_resolve_target_topic_defaults_to_base():
+    assert app.resolve_target_topic("awtrix/device/custom", "uuid") == "awtrix/device/custom"
+
+
+def test_resolve_target_topic_formats_placeholder():
+    topic = app.resolve_target_topic("bridge/{uuid}/state", "abc-123")
+    assert topic == "bridge/abc-123/state"
+
+
+def test_resolve_target_topic_appends_on_trailing_slash():
+    topic = app.resolve_target_topic("sensors/", "xyz")
+    assert topic == "sensors/xyz"

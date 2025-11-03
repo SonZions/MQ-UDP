@@ -139,16 +139,41 @@ def config_from_env() -> Config:
     )
 
 
-def format_control_message(control: ControlRow) -> str:
+def format_control_message(
+    control: ControlRow,
+    state_resolver: Optional[Callable[[str], Optional[str]]] = None,
+) -> str:
     """Render a MQTT friendly payload for a control."""
 
     if control.states:
-        values = " | ".join(f"{key}: {value}" for key, value in control.states)
+        rendered = []
+        for key, value in control.states:
+            if state_resolver:
+                resolved = state_resolver(value)
+                if resolved is not None:
+                    value = resolved
+            rendered.append(f"{key}: {value}")
+        values = " | ".join(rendered)
     elif control.details:
         values = " | ".join(f"{key}: {value}" for key, value in control.details)
     else:
         values = "Keine Daten verfügbar"
     return f"{control.name} – {values}"
+
+
+def resolve_target_topic(base: str, uuid: str) -> str:
+    """Derive the target MQTT topic for an automatically published control."""
+
+    if "{uuid}" in base:
+        try:
+            return base.format(uuid=uuid)
+        except Exception:
+            return base
+
+    if base.endswith("/"):
+        return f"{base}{uuid}"
+
+    return base
 
 
 def automatic_mode(
@@ -182,8 +207,8 @@ def automatic_mode(
                     control = controls.get(uuid)
                     if not control:
                         continue
-                    message = format_control_message(control)
-                    topic = f"{config.mqtt_topic}/{uuid}"
+                    message = format_control_message(control, fetcher.resolve_state_value)
+                    topic = resolve_target_topic(config.mqtt_topic, uuid)
                     client.publish(topic, message)
                 fetch_failures = 0
             except Exception as exc:  # pragma: no cover - defensive logging only
