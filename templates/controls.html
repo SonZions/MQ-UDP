@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Loxone Werte Übersicht</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        margin: 2rem;
+        line-height: 1.4;
+      }
+
+      h1 {
+        margin-bottom: 0.2rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+        font-size: 0.9rem;
+      }
+
+      thead th {
+        position: sticky;
+        top: 0;
+        background: #1f2937;
+        color: #ffffff;
+        text-align: left;
+        padding: 0.6rem;
+      }
+
+      tbody tr:nth-child(odd) {
+        background-color: rgba(31, 41, 55, 0.05);
+      }
+
+      td {
+        vertical-align: top;
+        border-bottom: 1px solid rgba(31, 41, 55, 0.2);
+        padding: 0.5rem;
+      }
+
+      .meta {
+        color: #6b7280;
+        font-size: 0.85rem;
+      }
+
+      .badge {
+        display: inline-block;
+        border-radius: 0.75rem;
+        padding: 0.2rem 0.6rem;
+        background: #2563eb;
+        color: white;
+        font-size: 0.75rem;
+        margin-right: 0.3rem;
+      }
+
+      ul {
+        margin: 0.2rem 0 0;
+        padding-left: 1.2rem;
+      }
+
+      li {
+        margin-bottom: 0.1rem;
+      }
+
+      .empty {
+        color: #9ca3af;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Loxone Werte Übersicht</h1>
+    <p class="meta">
+      Letzte Aktualisierung:
+      <strong>{{ metadata.last_modified or "unbekannt" }}</strong> ·
+      Steuerelemente: <strong>{{ metadata.control_count }}</strong> · Räume:
+      <strong>{{ metadata.room_count }}</strong> · Kategorien:
+      <strong>{{ metadata.category_count }}</strong>
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Typ</th>
+          <th>Raum</th>
+          <th>Kategorie</th>
+          <th>Details</th>
+          <th>Zustände</th>
+          <th>Links</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for control in controls %}
+        <tr>
+          <td>
+            <div><strong>{{ control.name }}</strong></div>
+            <div class="meta">UUID: {{ control.uuid }}</div>
+          </td>
+          <td>{{ control.type or "-" }}</td>
+          <td>{{ control.room or "-" }}</td>
+          <td>{{ control.category or "-" }}</td>
+          <td>
+            {% if control.details %}
+            <ul>
+              {% for key, value in control.details %}
+              <li><strong>{{ key }}</strong>: {{ value }}</li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span class="empty">keine Details</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if control.states %}
+            <ul>
+              {% for key, value in control.states %}
+              <li><strong>{{ key }}</strong>: {{ value }}</li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span class="empty">keine Zustände</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if control.links %}
+            {% for link in control.links %}
+            <span class="badge">{{ link }}</span>
+            {% endfor %}
+            {% else %}
+            <span class="empty">keine Links</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>
