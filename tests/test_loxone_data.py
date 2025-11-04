@@ -131,3 +131,22 @@ def test_resolve_state_value_handles_ll_payload(monkeypatch):
     result = fetcher.resolve_state_value(uuid)
 
     assert result == "72.5"
+
+
+def test_resolve_state_value_returns_error_message(monkeypatch):
+    source = LoxoneDataSource(state_url_template="http://host/dev/sps/io/{uuid}")
+    fetcher = LoxoneDataFetcher(source)
+
+    mock_requests = MagicMock()
+    mock_requests.get.side_effect = RuntimeError("kaputt")
+
+    monkeypatch.setitem(sys.modules, "requests", mock_requests)
+
+    uuid = "fedcba98-7654-3210-fedc-ba9876543210"
+
+    result = fetcher.resolve_state_value(uuid)
+    repeat = fetcher.resolve_state_value(uuid)
+
+    assert "Fehler bei Statusabfrage" in result
+    assert "kaputt" in result
+    assert repeat == result
