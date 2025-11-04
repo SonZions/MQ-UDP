@@ -67,6 +67,32 @@ Das Jinja2-Template rendert die Tabelle der Controls und bindet die Automatik-Sc
 2. **Loxone JSON**: `LoxoneDataFetcher.load` liest das Roh-JSON; `extract_controls` normalisiert `controls`, `rooms`, `cats` zu `ControlRow`-Instanzen; `_flatten_mapping` wandelt `details`/`states` in sortierte Listen um.【F:loxone_data.py†L68-L224】【F:loxone_data.py†L244-L266】
 3. **MQTT/UDP**: `mqtt_to_udp` registriert ein On-Message-Callback, das Nachrichten dekodiert, mit `should_ignore_mqtt_message` filtert und via `send_udp_message` weiterleitet. `udp_to_mqtt` empfängt UDP-Pakete, markiert sie als lokal (`record_local_mqtt_message`) und veröffentlicht sie über `mqtt.Client.publish`.【F:app.py†L52-L206】
 4. **Automatikmodus**: `automatic_mode` ruft periodisch `fetcher.load()` auf, filtert aktivierte UUIDs (`AutoConfigStore.enabled_ids`), generiert Textpayloads (`format_control_message` + optional `resolve_state_value`) und publiziert sie auf `resolve_target_topic`. deaktivierte UUIDs erhalten `{}` zur Rücksetzung.【F:app.py†L261-L356】【F:auto_config.py†L35-L47】【F:loxone_data.py†L113-L180】
+
+### API-Aufrufe und MQTT-Payloads im Automatikmodus
+
+Der Automatikmodus arbeitet in einem festen Ablauf, sobald mindestens ein Control aktiviert ist:
+
+1. **LoxAPP3 laden** – In jedem Intervall ruft `fetcher.load()` die LoxAPP3.json ab. Bei konfigurierter URL entsteht ein HTTP-GET auf `LOXONE_URL`; andernfalls wird die lokale Datei geöffnet.【F:app.py†L280-L312】【F:loxone_data.py†L68-L111】
+2. **Statuswerte nachladen** – Für jedes aktivierte Control wird `format_control_message` aufgerufen. Enthält das Control Zustands-UUIDs, dann fragt `resolve_state_value` jede UUID über das Template `LOXONE_STATE_URL_TEMPLATE` (z. B. `https://miniserver/dev/sps/io/{uuid}`) per HTTP-GET ab und cached die Antwort.【F:app.py†L195-L233】【F:loxone_data.py†L113-L180】
+3. **MQTT-Veröffentlichung** – Das resultierende JSON (`{"text": ...}`) wird pro Control über `client.publish` auf dem Topic `resolve_target_topic(config.mqtt_topic, uuid)` publiziert. Ist das Basistopic z. B. `awtrix/controls`, entsteht für die UUID `a1b2` der Topic `awtrix/controls/a1b2`. Deaktivierte Controls bekommen ein leeres `{}` als Rücksetzsignal.【F:app.py†L305-L336】
+
+#### Beispiel 1: „Schieber bei Speichertemperatur“
+
+*Aktive UUID:* `1f2e3d4c-aaaa-bbbb-cccc-1234567890ab`
+
+1. `fetcher.load()` lädt `https://miniserver/data/LoxAPP3.json`.
+2. Das Control enthält den State-Eintrag `("active", "11112222-3333-4444-5555-666677778888")`. `resolve_state_value` ruft `https://miniserver/dev/sps/io/11112222-3333-4444-5555-666677778888` auf und erhält den Text `"An"`.
+3. `format_control_message` baut das Payload `{"text": "Schieber bei Speichertemperatur An"}`. `automatic_mode` veröffentlicht es auf `awtrix/controls/1f2e3d4c-aaaa-bbbb-cccc-1234567890ab`.
+
+#### Beispiel 2: Detailwert ohne Statusabfrage
+
+*Aktive UUID:* `9abc8def-0000-1111-2222-333344445555`
+
+1. `fetcher.load()` liefert die JSON-Daten wie oben.
+2. Das Control „Warmwasserspeicher“ hat keine `states`, aber ein Detail `("Temperatur", "48.3 °C")`. Dadurch entfällt der Status-API-Call.
+3. `format_control_message` erzeugt `{"text": "Warmwasserspeicher Temperatur: 48.3 °C"}` und der Automatikmodus publiziert es auf `awtrix/controls/9abc8def-0000-1111-2222-333344445555`.
+
+Diese Beispiele zeigen, dass jeder Automatikdurchlauf höchstens einen JSON-Download plus eine Statusabfrage pro aktivem Control benötigt. Antworten werden gecached, wodurch sich Folgeabrufe während des gleichen Intervalls vermeiden lassen.【F:loxone_data.py†L117-L176】
 5. **Frontend**: `render_controls` übergibt `controls`, `metadata`, `auto_config` an `controls.html`. Das Template rendert Schalter, deren Status per JavaScript geladen und aktualisiert wird. Änderungen rufen `/api/auto-config/{uuid}` auf, welches den Store aktualisiert und sofortiges Feedback liefert.【F:web_app.py†L76-L131】【F:templates/controls.html†L130-L211】
 
 ## Zusammenarbeit der Module
