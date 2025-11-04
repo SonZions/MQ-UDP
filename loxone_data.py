@@ -123,13 +123,13 @@ class LoxoneDataFetcher:
             self._state_cache[candidate] = None
             return None
 
+        url = template.format(uuid=candidate)
         try:
             import requests  # type: ignore
-        except ModuleNotFoundError:
-            self._state_cache[candidate] = None
-            return None
-
-        url = template.format(uuid=candidate)
+        except ModuleNotFoundError as exc:
+            message = f"Fehler bei Statusabfrage ({url}): {exc}"
+            self._state_cache[candidate] = message
+            return message
         try:
             response = requests.get(
                 url,
@@ -137,9 +137,10 @@ class LoxoneDataFetcher:
                 timeout=self.timeout,
             )
             response.raise_for_status()
-        except Exception:
-            self._state_cache[candidate] = None
-            return None
+        except Exception as exc:
+            message = f"Fehler bei Statusabfrage ({url}): {exc}"
+            self._state_cache[candidate] = message
+            return message
 
         value: Any
         try:
