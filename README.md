@@ -39,6 +39,7 @@ docker run --rm \
   [-e LOXONE_USERNAME=<BENUTZER>] \
   [-e LOXONE_PASSWORD=<PASSWORT>] \
   [-e LOXONE_JSON_PATH=/data/loxone.json] \
+  [-e LOXONE_STATE_URL_TEMPLATE=<https://host/dev/sps/io/{uuid}>] \
   [-e AUTO_CONFIG_PATH=/data/auto_config.json] \
   [-v $(pwd)/data:/data] \
   mq-udp
@@ -50,6 +51,9 @@ docker run --rm \
   `-v`).
 * `LOXONE_JSON_PATH` kann auf eine bereits vorhandene JSON-Datei zeigen, die im
   Container verfügbar ist.
+* `LOXONE_STATE_URL_TEMPLATE` überschreibt die automatisch abgeleitete URL für
+  das Nachladen einzelner Statuswerte. Der Platzhalter `{uuid}` wird durch die
+  jeweilige UUID des Status ersetzt.
 * Über `AUTOMATIC_INTERVAL` wird das Veröffentlichungsintervall der automatisch
   ausgewählten Werte (in Sekunden) festgelegt.
 
@@ -72,6 +76,8 @@ Umgebungsvariablen gesetzt werden:
 - `LOXONE_URL`: Vollständige URL zur `LoxAPP3.json` deines Miniservers
 - `LOXONE_USERNAME` / `LOXONE_PASSWORD`: Zugangsdaten für Basic Auth
 - `LOXONE_JSON_PATH`: Pfad zu einer lokalen JSON-Datei (optional, Standard: `json.txt`)
+- `LOXONE_STATE_URL_TEMPLATE`: URL-Schablone zum direkten Abfragen einzelner
+  Statuswerte (optional, Standard: Ableitung aus `LOXONE_URL`)
 - `AUTO_CONFIG_PATH`: Pfad zur JSON-Datei, in der die Automatik-Konfiguration
   gespeichert wird (Standard: `auto_config.json` im Arbeitsverzeichnis)
 - `AUTOMATIC_INTERVAL`: Veröffentlichungsintervall der automatischen MQTT-Nachrichten
