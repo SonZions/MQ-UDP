@@ -35,11 +35,12 @@ docker run --rm \
   [-e UDP_IP=127.0.0.1] \
   [-e UDP_PORT=5005] \
   [-e AUTOMATIC_INTERVAL=30] \
+  [-e LOXONE_HOSTNAME=miniserver.local] \
   [-e LOXONE_URL=<https://host/data/LoxAPP3.json>] \
   [-e LOXONE_USERNAME=<BENUTZER>] \
   [-e LOXONE_PASSWORD=<PASSWORT>] \
   [-e LOXONE_JSON_PATH=/data/loxone.json] \
-  [-e LOXONE_STATE_URL_TEMPLATE=<https://host/dev/sps/io/{uuid}>] \
+  [-e LOXONE_STATE_URL_TEMPLATE=<https://host/jdev/sps/io/{uuid}/state>] \
   [-e AUTO_CONFIG_PATH=/data/auto_config.json] \
   [-v $(pwd)/data:/data] \
   mq-udp
@@ -49,6 +50,9 @@ docker run --rm \
   fest. Wird eine Datei außerhalb des Containers genutzt, sollte das
   entsprechende Verzeichnis als Volume eingebunden werden (siehe Beispiel mit
   `-v`).
+* `LOXONE_HOSTNAME` setzt den Hostnamen deines Miniservers. Daraus werden
+  standardmäßig `LOXONE_URL` (`http://<hostname>/data/LoxAPP3.json`) und die
+  Statusabfrage (`http://<hostname>/jdev/sps/io/{uuid}/state`) abgeleitet.
 * `LOXONE_JSON_PATH` kann auf eine bereits vorhandene JSON-Datei zeigen, die im
   Container verfügbar ist.
 * `LOXONE_STATE_URL_TEMPLATE` überschreibt die automatisch abgeleitete URL für
@@ -73,11 +77,15 @@ Standardmäßig wird die Beispieldatei `json.txt` aus dem Repository verwendet.
 Um die Daten direkt von deinem Miniserver abzurufen, können folgende
 Umgebungsvariablen gesetzt werden:
 
+- `LOXONE_HOSTNAME`: Hostname oder IP-Adresse deines Miniservers. Ohne weitere
+  Angaben werden daraus `LOXONE_URL` und `LOXONE_STATE_URL_TEMPLATE`
+  abgeleitet.
 - `LOXONE_URL`: Vollständige URL zur `LoxAPP3.json` deines Miniservers
 - `LOXONE_USERNAME` / `LOXONE_PASSWORD`: Zugangsdaten für Basic Auth
 - `LOXONE_JSON_PATH`: Pfad zu einer lokalen JSON-Datei (optional, Standard: `json.txt`)
 - `LOXONE_STATE_URL_TEMPLATE`: URL-Schablone zum direkten Abfragen einzelner
-  Statuswerte (optional, Standard: Ableitung aus `LOXONE_URL`)
+  Statuswerte (optional, Standard: `http://<hostname>/jdev/sps/io/{uuid}/state`
+  bei gesetztem Hostname bzw. Ableitung aus `LOXONE_URL`)
 - `AUTO_CONFIG_PATH`: Pfad zur JSON-Datei, in der die Automatik-Konfiguration
   gespeichert wird (Standard: `auto_config.json` im Arbeitsverzeichnis)
 - `AUTOMATIC_INTERVAL`: Veröffentlichungsintervall der automatischen MQTT-Nachrichten

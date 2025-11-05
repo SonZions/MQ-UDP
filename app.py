@@ -200,11 +200,20 @@ def format_control_message(
 
     values = []
     if control.states:
+        resolved_values = []
+        fallback_values = []
         for _key, raw_value in control.states:
             resolved = state_resolver(raw_value) if state_resolver else None
-            candidate = resolved if resolved is not None else raw_value
-            if candidate:
-                values.append(str(candidate).strip())
+            if resolved:
+                resolved_values.append(str(resolved).strip())
+            elif raw_value:
+                fallback_values.append(str(raw_value).strip())
+
+        candidates = resolved_values or fallback_values
+        if candidates:
+            values.append(candidates[0])
+            if len(candidates) > 1:
+                values.extend(candidate for candidate in candidates[1:] if candidate)
     elif control.details:
         for key, value in control.details:
             text = f"{key}: {value}".strip()
@@ -218,7 +227,7 @@ def format_control_message(
     value_text = " ".join(filter(None, values)).strip()
 
     if label and value_text:
-        text = f"{label} {value_text}".strip()
+        text = f"{label}: {value_text}".strip()
     elif label:
         text = label
     else:

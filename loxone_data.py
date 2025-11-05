@@ -28,6 +28,18 @@ class LoxoneDataSource:
             return (self.username or "", self.password or "")
         return None
 
+    @staticmethod
+    def _resolve_hostname() -> Optional[str]:
+        for key in (
+            "LOXONE_HOSTNAME",
+            "LOXONEMINISERVER_HOSTNAME",
+            "LOXONE_MINISERVER_HOSTNAME",
+        ):
+            value = os.getenv(key)
+            if value:
+                return value.strip()
+        return None
+
     @classmethod
     def from_env(cls) -> "LoxoneDataSource":
         """Create a data source based on environment variables.
@@ -39,15 +51,24 @@ class LoxoneDataSource:
             LOXONE_JSON_PATH:  Optional fallback path to a local JSON file.
         """
 
+        hostname = cls._resolve_hostname()
+
         path_value = os.getenv("LOXONE_JSON_PATH", "json.txt")
         json_path = Path(path_value) if path_value else None
+
         url = os.getenv("LOXONE_URL") or None
+        if not url and hostname:
+            url = f"http://{hostname}/data/LoxAPP3.json"
+
         template = os.getenv("LOXONE_STATE_URL_TEMPLATE") or None
-        if not template and url:
-            parsed = urlparse(url)
-            if parsed.scheme and parsed.netloc:
-                base = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
-                template = f"{base}/dev/sps/io/{{uuid}}"
+        if not template:
+            if hostname:
+                template = f"http://{hostname}/jdev/sps/io/{{uuid}}/state"
+            elif url:
+                parsed = urlparse(url)
+                if parsed.scheme and parsed.netloc:
+                    base = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+                    template = f"{base}/jdev/sps/io/{{uuid}}/state"
 
         return cls(
             url=url,

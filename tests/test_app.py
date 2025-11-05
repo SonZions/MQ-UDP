@@ -116,7 +116,7 @@ def test_format_control_message_uses_state_resolver():
 
     message = app.format_control_message(control, resolver)
 
-    assert json.loads(message) == {"text": "Sensor 43"}
+    assert json.loads(message) == {"text": "Sensor: 43"}
 
 
 def test_format_control_message_falls_back_to_details():
@@ -133,7 +133,7 @@ def test_format_control_message_falls_back_to_details():
 
     message = app.format_control_message(control, None)
 
-    assert json.loads(message) == {"text": "Info status: aktiv"}
+    assert json.loads(message) == {"text": "Info: status: aktiv"}
 
 
 def test_resolve_target_topic_defaults_to_base():
@@ -202,5 +202,8 @@ def test_automatic_mode_publishes_clear_message_when_disabled(monkeypatch):
 
     topics_messages = [call.args for call in client.publish.call_args_list]
 
-    assert ("awtrix/device/custom/uuid-123", json.dumps({"text": "Speichertemperatur 59°"}, ensure_ascii=False)) in topics_messages
+    assert (
+        "awtrix/device/custom/uuid-123",
+        json.dumps({"text": "Speichertemperatur: 59°"}, ensure_ascii=False),
+    ) in topics_messages
     assert ("awtrix/device/custom/uuid-123", "{}") in topics_messages
