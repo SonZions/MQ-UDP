@@ -73,7 +73,7 @@ Das Jinja2-Template rendert die Tabelle der Controls und bindet die Automatik-Sc
 Der Automatikmodus arbeitet in einem festen Ablauf, sobald mindestens ein Control aktiviert ist:
 
 1. **LoxAPP3 laden** – In jedem Intervall ruft `fetcher.load()` die LoxAPP3.json ab. Bei konfigurierter URL entsteht ein HTTP-GET auf `LOXONE_URL`; andernfalls wird die lokale Datei geöffnet.【F:app.py†L280-L312】【F:loxone_data.py†L68-L111】
-2. **Statuswerte nachladen** – Für jedes aktivierte Control wird `format_control_message` aufgerufen. Enthält das Control Zustands-UUIDs, dann fragt `resolve_state_value` jede UUID über das Template `LOXONE_STATE_URL_TEMPLATE` (z. B. `https://miniserver/dev/sps/io/{uuid}`) per HTTP-GET ab und cached die Antwort.【F:app.py†L195-L233】【F:loxone_data.py†L113-L180】
+2. **Statuswerte nachladen** – Für jedes aktivierte Control wird `format_control_message` aufgerufen. Enthält das Control Zustands-UUIDs, dann fragt `resolve_state_value` jede UUID über das Template `LOXONE_STATE_URL_TEMPLATE` (z. B. `https://miniserver/jdev/sps/io/{uuid}/state`) per HTTP-GET ab und cached die Antwort.【F:app.py†L195-L233】【F:loxone_data.py†L113-L180】
 3. **MQTT-Veröffentlichung** – Das resultierende JSON (`{"text": ...}`) wird pro Control über `client.publish` auf dem Topic `resolve_target_topic(config.mqtt_topic, uuid)` publiziert. Ist das Basistopic z. B. `awtrix/controls`, entsteht für die UUID `a1b2` der Topic `awtrix/controls/a1b2`. Deaktivierte Controls bekommen ein leeres `{}` als Rücksetzsignal.【F:app.py†L305-L336】
 
 #### Beispiel 1: „Schieber bei Speichertemperatur“
@@ -81,8 +81,8 @@ Der Automatikmodus arbeitet in einem festen Ablauf, sobald mindestens ein Contro
 *Aktive UUID:* `1f2e3d4c-aaaa-bbbb-cccc-1234567890ab`
 
 1. `fetcher.load()` lädt `https://miniserver/data/LoxAPP3.json`.
-2. Das Control enthält den State-Eintrag `("active", "11112222-3333-4444-5555-666677778888")`. `resolve_state_value` ruft `https://miniserver/dev/sps/io/11112222-3333-4444-5555-666677778888` auf und erhält den Text `"An"`.
-3. `format_control_message` baut das Payload `{"text": "Schieber bei Speichertemperatur An"}`. `automatic_mode` veröffentlicht es auf `awtrix/controls/1f2e3d4c-aaaa-bbbb-cccc-1234567890ab`.
+2. Das Control enthält den State-Eintrag `("active", "11112222-3333-4444-5555-666677778888")`. `resolve_state_value` ruft `https://miniserver/jdev/sps/io/11112222-3333-4444-5555-666677778888/state` auf und erhält den Text `"An"`.
+3. `format_control_message` baut das Payload `{"text": "Schieber bei Speichertemperatur: An"}`. `automatic_mode` veröffentlicht es auf `awtrix/controls/1f2e3d4c-aaaa-bbbb-cccc-1234567890ab`.
 
 #### Beispiel 2: Detailwert ohne Statusabfrage
 

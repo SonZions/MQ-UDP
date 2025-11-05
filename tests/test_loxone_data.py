@@ -78,14 +78,28 @@ def test_extract_controls_creates_rows(sample_payload: Path) -> None:
 def test_data_source_from_env_derives_template(monkeypatch):
     monkeypatch.setenv("LOXONE_URL", "http://miniserver.local/data/LoxAPP3.json")
     monkeypatch.delenv("LOXONE_STATE_URL_TEMPLATE", raising=False)
+    monkeypatch.delenv("LOXONE_HOSTNAME", raising=False)
+    monkeypatch.delenv("LOXONEMINISERVER_HOSTNAME", raising=False)
+    monkeypatch.delenv("LOXONE_MINISERVER_HOSTNAME", raising=False)
 
     source = LoxoneDataSource.from_env()
 
-    assert source.state_url_template == "http://miniserver.local/dev/sps/io/{uuid}"
+    assert source.state_url_template == "http://miniserver.local/jdev/sps/io/{uuid}/state"
+
+
+def test_data_source_from_env_uses_hostname_defaults(monkeypatch):
+    monkeypatch.delenv("LOXONE_URL", raising=False)
+    monkeypatch.delenv("LOXONE_STATE_URL_TEMPLATE", raising=False)
+    monkeypatch.setenv("LOXONE_HOSTNAME", "miniserver.local")
+
+    source = LoxoneDataSource.from_env()
+
+    assert source.url == "http://miniserver.local/data/LoxAPP3.json"
+    assert source.state_url_template == "http://miniserver.local/jdev/sps/io/{uuid}/state"
 
 
 def test_resolve_state_value_fetches_and_caches(monkeypatch):
-    source = LoxoneDataSource(state_url_template="http://host/dev/sps/io/{uuid}")
+    source = LoxoneDataSource(state_url_template="http://host/jdev/sps/io/{uuid}/state")
     fetcher = LoxoneDataFetcher(source)
 
     response = MagicMock()
@@ -106,14 +120,14 @@ def test_resolve_state_value_fetches_and_caches(monkeypatch):
     assert first == "48.7"
     assert second == "48.7"
     mock_requests.get.assert_called_once_with(
-        "http://host/dev/sps/io/01234567-89ab-cdef-0123-456789abcdef",
+        "http://host/jdev/sps/io/01234567-89ab-cdef-0123-456789abcdef/state",
         auth=source.auth,
         timeout=fetcher.timeout,
     )
 
 
 def test_resolve_state_value_handles_ll_payload(monkeypatch):
-    source = LoxoneDataSource(state_url_template="http://host/dev/sps/io/{uuid}")
+    source = LoxoneDataSource(state_url_template="http://host/jdev/sps/io/{uuid}/state")
     fetcher = LoxoneDataFetcher(source)
 
     response = MagicMock()
@@ -134,7 +148,7 @@ def test_resolve_state_value_handles_ll_payload(monkeypatch):
 
 
 def test_resolve_state_value_returns_error_message(monkeypatch):
-    source = LoxoneDataSource(state_url_template="http://host/dev/sps/io/{uuid}")
+    source = LoxoneDataSource(state_url_template="http://host/jdev/sps/io/{uuid}/state")
     fetcher = LoxoneDataFetcher(source)
 
     mock_requests = MagicMock()
