@@ -279,11 +279,6 @@ def automatic_mode(
                         "Automatikmodus setzte Nachricht zurück – Topic: %s", topic
                     )
 
-            if not enabled:
-                previous_enabled = enabled
-                time.sleep(interval_override or config.automatic_interval)
-                continue
-
             try:
                 fetcher = fetcher_factory()
                 payload = fetcher.load()
@@ -292,7 +287,8 @@ def automatic_mode(
                     for row in LoxoneDataFetcher.extract_controls(payload)
                 }
                 store.sync_from(controls.keys())
-                for uuid in enabled:
+                active_ids = enabled or set(controls)
+                for uuid in active_ids:
                     control = controls.get(uuid)
                     if not control:
                         continue

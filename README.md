@@ -59,7 +59,8 @@ docker run --rm \
   das Nachladen einzelner Statuswerte. Der Platzhalter `{uuid}` wird durch die
   jeweilige UUID des Status ersetzt.
 * Über `AUTOMATIC_INTERVAL` wird das Veröffentlichungsintervall der automatisch
-  ausgewählten Werte (in Sekunden) festgelegt.
+  veröffentlichten Werte (in Sekunden) festgelegt. Ohne gesetzte Automatik-Schalter
+  werden alle verfügbaren Controls publiziert.
 
 ## Webansicht der Loxone Werte
 
