@@ -207,3 +207,58 @@ def test_automatic_mode_publishes_clear_message_when_disabled(monkeypatch):
         json.dumps({"text": "Speichertemperatur: 59°"}, ensure_ascii=False),
     ) in topics_messages
     assert ("awtrix/device/custom/uuid-123", "{}") in topics_messages
+
+
+def test_automatic_mode_publishes_all_controls_without_selection(monkeypatch):
+    config = app.Config(
+        mqtt_broker="broker",
+        mqtt_port=1883,
+        mqtt_topic="awtrix/device/custom",
+        udp_ip="127.0.0.1",
+        udp_port=5005,
+    )
+
+    payload = {
+        "controls": {
+            "uuid-123": {
+                "name": "Temperatur",
+                "type": "InfoOnlyAnalog",
+                "room": "",
+                "cat": "",
+                "states": {"value": "state-uuid"},
+                "links": [],
+            }
+        },
+        "rooms": {},
+        "cats": {},
+    }
+
+    fetcher = MagicMock()
+    fetcher.load.return_value = payload
+    fetcher.resolve_state_value.return_value = "21.5°"
+    fetcher_factory = MagicMock(return_value=fetcher)
+
+    store = MagicMock()
+    store.enabled_ids.side_effect = [
+        set(),
+        KeyboardInterrupt(),
+    ]
+    store.sync_from.return_value = None
+
+    client = MagicMock()
+    monkeypatch.setattr(app, "create_mqtt_client", lambda *_: client)
+
+    try:
+        app.automatic_mode(
+            config,
+            store,
+            fetcher_factory,
+            interval_override=0.0,
+        )
+    except KeyboardInterrupt:
+        pass
+
+    assert (
+        "awtrix/device/custom/uuid-123",
+        json.dumps({"text": "Temperatur: 21.5°"}, ensure_ascii=False),
+    ) in [call.args for call in client.publish.call_args_list]
