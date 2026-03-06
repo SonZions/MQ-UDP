@@ -40,6 +40,10 @@ class AutoConfigUpdate(BaseModel):
     enabled: bool
 
 
+class ModeConfigUpdate(BaseModel):
+    mode: str
+
+
 @lru_cache()
 def get_fetcher() -> LoxoneDataFetcher:
     source = LoxoneDataSource.from_env()
@@ -113,6 +117,7 @@ def render_controls(
             "controls": controls,
             "metadata": metadata,
             "auto_config": store.as_mapping(),
+            "mode_config": store.modes_mapping(),
         },
     )
 
@@ -130,6 +135,24 @@ def update_auto_config(
 ):
     store.set_enabled(control_uuid, payload.enabled)
     return {"uuid": control_uuid, "enabled": store.is_enabled(control_uuid)}
+
+
+@app.get("/api/mode-config")
+def read_mode_config(store: AutoConfigStore = Depends(get_auto_config_store)) -> Dict[str, str]:
+    return store.modes_mapping()
+
+
+@app.post("/api/mode-config/{control_uuid}")
+def update_mode_config(
+    control_uuid: str,
+    payload: ModeConfigUpdate,
+    store: AutoConfigStore = Depends(get_auto_config_store),
+):
+    try:
+        store.set_mode(control_uuid, payload.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"uuid": control_uuid, "mode": store.get_mode(control_uuid)}
 
 
 def _default_host() -> str:

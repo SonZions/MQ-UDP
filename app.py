@@ -265,6 +265,7 @@ def automatic_mode(
     client.loop_start()
     fetch_failures = 0
     previous_enabled: Set[str] = set()
+    previous_messages: Dict[str, str] = {}
     try:
         while True:
             enabled = store.enabled_ids()
@@ -275,6 +276,7 @@ def automatic_mode(
                     empty_payload = "{}"
                     record_local_mqtt_message(empty_payload)
                     client.publish(topic, empty_payload)
+                    previous_messages.pop(uuid, None)
                     logger.info(
                         "Automatikmodus setzte Nachricht zurück – Topic: %s", topic
                     )
@@ -298,10 +300,19 @@ def automatic_mode(
                         continue
                     message = format_control_message(control, fetcher.resolve_state_value)
                     topic = resolve_target_topic(config.mqtt_topic, uuid)
+                    mode = store.get_mode(uuid)
+
+                    if mode == "notification":
+                        # Nur bei Wertänderung publizieren
+                        if previous_messages.get(uuid) == message:
+                            continue
+                        previous_messages[uuid] = message
+
                     record_local_mqtt_message(message)
                     client.publish(topic, message)
                     logger.info(
-                        "Automatikmodus veröffentlichte Nachricht – Topic: %s, Nachricht: %s",
+                        "Automatikmodus veröffentlichte Nachricht (%s) – Topic: %s, Nachricht: %s",
+                        mode,
                         topic,
                         message,
                     )

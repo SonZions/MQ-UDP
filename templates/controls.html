@@ -180,11 +180,23 @@
         font-weight: 500;
       }
 
-      td .uuid {
-        display: block;
-        font-size: 0.75rem;
-        color: var(--fg-muted);
-        font-weight: 400;
+      .mode-select {
+        padding: 0.3rem 0.5rem;
+        border: 1px solid var(--search-border);
+        border-radius: 0.4rem;
+        background: var(--search-bg);
+        color: var(--fg);
+        font-size: 0.8rem;
+        cursor: pointer;
+        outline: none;
+      }
+
+      .mode-select:focus {
+        border-color: var(--accent);
+      }
+
+      .mode-cell {
+        text-align: center;
       }
 
       .switch {
@@ -272,16 +284,14 @@
             <th data-col="1">Typ <span class="sort-icon">&#9650;</span></th>
             <th data-col="2">Raum <span class="sort-icon">&#9650;</span></th>
             <th data-col="3">Kategorie <span class="sort-icon">&#9650;</span></th>
-            <th class="no-sort">Automatik</th>
+            <th data-col="4">Automatik <span class="sort-icon">&#9650;</span></th>
+            <th data-col="5">Modus <span class="sort-icon">&#9650;</span></th>
           </tr>
         </thead>
         <tbody>
           {% for control in controls %}
           <tr data-name="{{ control.name|lower }}">
-            <td class="name-cell">
-              {{ control.name }}
-              <span class="uuid">{{ control.uuid }}</span>
-            </td>
+            <td class="name-cell">{{ control.name }}</td>
             <td>{{ control.type or "-" }}</td>
             <td>{{ control.room or "-" }}</td>
             <td>{{ control.category or "-" }}</td>
@@ -292,6 +302,12 @@
                        {% if auto_config.get(control.uuid) %}checked{% endif %} />
                 <span class="slider"></span>
               </label>
+            </td>
+            <td class="mode-cell">
+              <select class="mode-select" data-uuid="{{ control.uuid }}">
+                <option value="app" {% if mode_config.get(control.uuid, 'app') == 'app' %}selected{% endif %}>App</option>
+                <option value="notification" {% if mode_config.get(control.uuid, 'app') == 'notification' %}selected{% endif %}>Notification</option>
+              </select>
             </td>
           </tr>
           {% endfor %}
@@ -344,8 +360,21 @@
 
           const rows = Array.from(tbody.rows);
           rows.sort((a, b) => {
-            const aText = a.cells[col].textContent.trim().toLowerCase();
-            const bText = b.cells[col].textContent.trim().toLowerCase();
+            let aText, bText;
+            if (col === 4) {
+              // Automatik: sort by checkbox state
+              const aChecked = a.cells[col].querySelector("input")?.checked ? "1" : "0";
+              const bChecked = b.cells[col].querySelector("input")?.checked ? "1" : "0";
+              aText = aChecked;
+              bText = bChecked;
+            } else if (col === 5) {
+              // Modus: sort by select value
+              aText = (a.cells[col].querySelector("select")?.value || "").toLowerCase();
+              bText = (b.cells[col].querySelector("select")?.value || "").toLowerCase();
+            } else {
+              aText = a.cells[col].textContent.trim().toLowerCase();
+              bText = b.cells[col].textContent.trim().toLowerCase();
+            }
             return currentSort.asc
               ? aText.localeCompare(bText, "de")
               : bText.localeCompare(aText, "de");
@@ -388,7 +417,46 @@
         t.addEventListener("change", () => updateEntry(t));
       });
 
+      // --- Mode config ---
+      async function loadModeConfiguration() {
+        try {
+          const resp = await fetch("/api/mode-config");
+          if (!resp.ok) return;
+          const data = await resp.json();
+          document.querySelectorAll(".mode-select").forEach((s) => {
+            if (data[s.dataset.uuid]) {
+              s.value = data[s.dataset.uuid];
+            }
+          });
+        } catch (e) {
+          console.error("Modus-Konfiguration konnte nicht geladen werden", e);
+        }
+      }
+
+      async function updateMode(select) {
+        const uuid = select.dataset.uuid;
+        const mode = select.value;
+        try {
+          const resp = await fetch(`/api/mode-config/${uuid}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode }),
+          });
+          if (!resp.ok) {
+            select.value = mode === "app" ? "notification" : "app";
+          }
+        } catch (e) {
+          select.value = mode === "app" ? "notification" : "app";
+          console.error("Modus konnte nicht gespeichert werden", e);
+        }
+      }
+
+      document.querySelectorAll(".mode-select").forEach((s) => {
+        s.addEventListener("change", () => updateMode(s));
+      });
+
       loadConfiguration();
+      loadModeConfiguration();
     </script>
   </body>
 </html>
