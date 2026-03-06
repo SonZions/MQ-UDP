@@ -7,13 +7,17 @@ from pathlib import Path
 from typing import Dict, Iterable, Set
 
 
+VALID_MODES = ("app", "notification")
+
+
 class AutoConfigStore:
-    """Store the enabled state of controls for the automatic mode."""
+    """Store the enabled state and display mode of controls for the automatic mode."""
 
     def __init__(self, path: Path):
         self.path = path
         self._lock = threading.Lock()
         self._enabled: Dict[str, bool] = {}
+        self._modes: Dict[str, str] = {}
         self._load()
 
     def _load(self) -> None:
@@ -32,9 +36,18 @@ class AutoConfigStore:
             cleaned = {str(key): bool(value) for key, value in enabled.items()}
             self._enabled.update(cleaned)
 
+        modes = raw.get("modes") if isinstance(raw, dict) else None
+        if isinstance(modes, dict):
+            cleaned = {
+                str(key): str(value)
+                for key, value in modes.items()
+                if str(value) in VALID_MODES
+            }
+            self._modes.update(cleaned)
+
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"enabled": self._enabled}
+        payload = {"enabled": self._enabled, "modes": self._modes}
         self.path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
     def as_mapping(self) -> Dict[str, bool]:
@@ -54,13 +67,31 @@ class AutoConfigStore:
         with self._lock:
             return {uuid for uuid, enabled in self._enabled.items() if enabled}
 
+    def get_mode(self, uuid: str) -> str:
+        with self._lock:
+            return self._modes.get(str(uuid), "app")
+
+    def set_mode(self, uuid: str, mode: str) -> None:
+        if mode not in VALID_MODES:
+            raise ValueError(f"Ungültiger Modus: {mode}")
+        with self._lock:
+            self._modes[str(uuid)] = mode
+            self._save()
+
+    def modes_mapping(self) -> Dict[str, str]:
+        with self._lock:
+            return dict(self._modes)
+
     def sync_from(self, uuids: Iterable[str]) -> None:
         """Ensure that only known UUIDs are present in the configuration."""
 
         with self._lock:
             known = set(str(uuid) for uuid in uuids)
-            stale = set(self._enabled) - known
-            if stale:
-                for key in stale:
+            stale_enabled = set(self._enabled) - known
+            stale_modes = set(self._modes) - known
+            if stale_enabled or stale_modes:
+                for key in stale_enabled:
                     self._enabled.pop(key, None)
+                for key in stale_modes:
+                    self._modes.pop(key, None)
                 self._save()
