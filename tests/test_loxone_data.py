@@ -193,3 +193,58 @@ def test_resolve_state_value_returns_error_message(monkeypatch):
     assert "Fehler bei Statusabfrage" in result
     assert "kaputt" in result
     assert repeat == result
+
+
+def test_resolve_state_value_falls_back_without_state_suffix(monkeypatch):
+    """When /state endpoint fails, try the URL without the /state suffix."""
+    source = LoxoneDataSource(state_url_template="http://host/jdev/sps/io/{uuid}/state")
+    fetcher = LoxoneDataFetcher(source)
+
+    ok_response = MagicMock()
+    ok_response.json.return_value = {"LL": {"value": "1", "Code": "200"}}
+    ok_response.text = '{"LL":{"value":"1"}}'
+    ok_response.raise_for_status.return_value = None
+
+    fail_response = MagicMock()
+    fail_response.raise_for_status.side_effect = RuntimeError("500 Server Error")
+
+    mock_requests = MagicMock()
+    # First call (/state) fails, second call (without /state) succeeds
+    mock_requests.get.side_effect = [fail_response, ok_response]
+
+    monkeypatch.setitem(sys.modules, "requests", mock_requests)
+
+    uuid = "aabbccdd-1122-3344-5566-778899aabbcc"
+
+    result = fetcher.resolve_state_value(uuid)
+
+    assert result == "1"
+    assert mock_requests.get.call_count == 2
+    # First call: with /state, second call: without /state
+    first_url = mock_requests.get.call_args_list[0][0][0]
+    second_url = mock_requests.get.call_args_list[1][0][0]
+    assert first_url.endswith("/state")
+    assert not second_url.endswith("/state")
+
+
+def test_resolve_state_raw_returns_json(monkeypatch):
+    source = LoxoneDataSource(state_url_template="http://host/jdev/sps/io/{uuid}/state")
+    fetcher = LoxoneDataFetcher(source)
+
+    response = MagicMock()
+    response.json.return_value = {"LL": {"value": "42", "Code": "200"}}
+    response.raise_for_status.return_value = None
+
+    mock_requests = MagicMock()
+    mock_requests.get.return_value = response
+
+    monkeypatch.setitem(sys.modules, "requests", mock_requests)
+
+    uuid = "01234567-89ab-cdef-0123-456789abcdef"
+
+    result = fetcher.resolve_state_raw(uuid)
+
+    assert result is not None
+    import json
+    parsed = json.loads(result)
+    assert parsed["LL"]["value"] == "42"

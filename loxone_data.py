@@ -145,21 +145,40 @@ class LoxoneDataFetcher:
             return None
 
         url = template.format(uuid=candidate)
+
+        # Build a list of URLs to try.  If the configured template ends with
+        # ``/state`` we additionally try the variant without that suffix
+        # because not all Loxone control types respond to the ``/state``
+        # endpoint (e.g. TimedSwitch).
+        urls_to_try = [url]
+        if url.endswith("/state"):
+            urls_to_try.append(url[: -len("/state")])
+
         try:
-            import requests  # type: ignore
+            import requests as _requests  # type: ignore
         except ModuleNotFoundError as exc:
             message = f"Fehler bei Statusabfrage ({url}): {exc}"
             self._state_cache[candidate] = message
             return message
-        try:
-            response = requests.get(
-                url,
-                auth=self.source.auth,
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-        except Exception as exc:
-            message = f"Fehler bei Statusabfrage ({url}): {exc}"
+
+        last_exc: Optional[Exception] = None
+        response = None
+        for try_url in urls_to_try:
+            try:
+                response = _requests.get(
+                    try_url,
+                    auth=self.source.auth,
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                response = None
+
+        if last_exc is not None or response is None:
+            message = f"Fehler bei Statusabfrage ({url}): {last_exc}"
             self._state_cache[candidate] = message
             return message
 
@@ -178,6 +197,44 @@ class LoxoneDataFetcher:
         resolved = str(extracted)
         self._state_cache[candidate] = resolved
         return resolved
+
+    def resolve_state_raw(self, candidate: str) -> Optional[str]:
+        """Return the raw JSON response for a state UUID (for debug display)."""
+
+        if not candidate or not isinstance(candidate, str):
+            return None
+
+        template = self.source.state_url_template
+        if not template or not _UUID_PATTERN.fullmatch(candidate):
+            return None
+
+        url = template.format(uuid=candidate)
+        urls_to_try = [url]
+        if url.endswith("/state"):
+            urls_to_try.append(url[: -len("/state")])
+
+        try:
+            import requests as _requests  # type: ignore
+        except ModuleNotFoundError:
+            return None
+
+        for try_url in urls_to_try:
+            try:
+                response = _requests.get(
+                    try_url,
+                    auth=self.source.auth,
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                try:
+                    data = response.json()
+                    return json.dumps(data, ensure_ascii=False, indent=2)
+                except ValueError:
+                    return response.text.strip()
+            except Exception:
+                continue
+
+        return None
 
     @staticmethod
     def extract_controls(data: Dict[str, Any]) -> List[ControlRow]:

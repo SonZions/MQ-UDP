@@ -150,6 +150,87 @@ def test_resolve_target_topic_appends_on_trailing_slash():
     assert topic == "sensors/xyz"
 
 
+def test_resolve_notification_topic_replaces_custom():
+    topic = app.resolve_notification_topic("awtrix/device/custom")
+    assert topic == "awtrix/device/notify"
+
+
+def test_resolve_notification_topic_strips_uuid_placeholder():
+    topic = app.resolve_notification_topic("awtrix/device/custom/{uuid}")
+    assert topic == "awtrix/device/notify"
+
+
+def test_resolve_notification_topic_fallback():
+    topic = app.resolve_notification_topic("some/topic")
+    assert topic == "some/topic/notify"
+
+
+def test_resolve_notification_topic_trailing_slash():
+    topic = app.resolve_notification_topic("awtrix/device/custom/")
+    assert topic == "awtrix/device/notify"
+
+
+def test_automatic_mode_notification_publishes_to_notify_topic(monkeypatch):
+    config = app.Config(
+        mqtt_broker="broker",
+        mqtt_port=1883,
+        mqtt_topic="awtrix/device/custom",
+        udp_ip="127.0.0.1",
+        udp_port=5005,
+    )
+
+    payload = {
+        "controls": {
+            "uuid-123": {
+                "name": "Temperatur",
+                "type": "InfoOnlyAnalog",
+                "room": "",
+                "cat": "",
+                "states": {"value": "state-uuid"},
+                "links": [],
+            }
+        },
+        "rooms": {},
+        "cats": {},
+    }
+
+    fetcher = MagicMock()
+    fetcher.load.return_value = payload
+    fetcher.resolve_state_value.return_value = "21°"
+    fetcher_factory = MagicMock(return_value=fetcher)
+
+    store = MagicMock()
+    store.enabled_ids.side_effect = [
+        {"uuid-123"},
+        KeyboardInterrupt(),
+    ]
+    store.get_mode.return_value = "notification"
+    store.sync_from.return_value = None
+
+    client = MagicMock()
+    monkeypatch.setattr(app, "create_mqtt_client", lambda *_: client)
+
+    try:
+        app.automatic_mode(
+            config,
+            store,
+            fetcher_factory,
+            interval_override=0.0,
+        )
+    except KeyboardInterrupt:
+        pass
+
+    topics_messages = [call.args for call in client.publish.call_args_list]
+
+    # Should publish to notify topic, not custom app topic
+    assert (
+        "awtrix/device/notify",
+        json.dumps({"text": "Temperatur: 21°"}, ensure_ascii=False),
+    ) in topics_messages
+    # Must NOT publish to custom app topic
+    assert not any(t == "awtrix/device/custom/uuid-123" for t, _ in topics_messages)
+
+
 def test_automatic_mode_publishes_clear_message_when_disabled(monkeypatch):
     config = app.Config(
         mqtt_broker="broker",
@@ -185,6 +266,7 @@ def test_automatic_mode_publishes_clear_message_when_disabled(monkeypatch):
         set(),
         KeyboardInterrupt(),
     ]
+    store.get_mode.return_value = "app"
     store.sync_from.return_value = None
 
     client = MagicMock()

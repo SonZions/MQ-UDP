@@ -155,6 +155,31 @@ def update_mode_config(
     return {"uuid": control_uuid, "mode": store.get_mode(control_uuid)}
 
 
+@app.get("/api/debug-status/{control_uuid}")
+def debug_status(
+    control_uuid: str,
+    fetcher: LoxoneDataFetcher = Depends(get_fetcher),
+) -> Dict[str, object]:
+    """Return the raw state responses for all state UUIDs of a control."""
+
+    try:
+        payload = fetcher.load()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    control_data = payload.get("controls", {}).get(control_uuid)
+    if control_data is None:
+        raise HTTPException(status_code=404, detail="Control nicht gefunden")
+
+    states = control_data.get("states", {})
+    result: Dict[str, object] = {}
+    for key, state_uuid in states.items():
+        raw = fetcher.resolve_state_raw(str(state_uuid))
+        result[key] = {"uuid": state_uuid, "response": raw}
+
+    return {"control_uuid": control_uuid, "states": result}
+
+
 def _default_host() -> str:
     return os.getenv("WEBAPP_HOST", "0.0.0.0")
 
