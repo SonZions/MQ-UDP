@@ -163,7 +163,6 @@ class LoxoneDataFetcher:
             self._state_cache[candidate] = message
             return message
 
-        value: Any
         try:
             data = response.json()
         except ValueError:
@@ -269,4 +268,6 @@ def _stringify(value: Any) -> str:
     return str(value)
 
 
-_UUID_PATTERN = re.compile(r"[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}")
+_UUID_PATTERN = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4,16}(-[0-9a-fA-F]{12})?"
+)

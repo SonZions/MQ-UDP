@@ -147,6 +147,35 @@ def test_resolve_state_value_handles_ll_payload(monkeypatch):
     assert result == "72.5"
 
 
+def test_resolve_state_value_handles_loxone_uuid_format(monkeypatch):
+    """Loxone uses non-standard UUIDs in 8-4-4-16 format (no final hyphen)."""
+    source = LoxoneDataSource(state_url_template="http://host/jdev/sps/io/{uuid}/state")
+    fetcher = LoxoneDataFetcher(source)
+
+    response = MagicMock()
+    response.json.return_value = {
+        "LL": {
+            "control": "dev/sps/io/16b6c69c-03bb-9476-ffffbf700ddc70dd/state",
+            "value": "0.0 Lx",
+            "Code": "200",
+        }
+    }
+    response.text = '{"LL":{"value":"0.0 Lx"}}'
+    response.raise_for_status.return_value = None
+
+    mock_requests = MagicMock()
+    mock_requests.get.return_value = response
+
+    monkeypatch.setitem(sys.modules, "requests", mock_requests)
+
+    uuid = "16b6c69c-03bb-9476-ffffbf700ddc70dd"
+
+    result = fetcher.resolve_state_value(uuid)
+
+    assert result == "0.0 Lx"
+    mock_requests.get.assert_called_once()
+
+
 def test_resolve_state_value_returns_error_message(monkeypatch):
     source = LoxoneDataSource(state_url_template="http://host/jdev/sps/io/{uuid}/state")
     fetcher = LoxoneDataFetcher(source)
