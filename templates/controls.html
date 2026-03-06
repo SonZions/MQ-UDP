@@ -252,6 +252,47 @@
         font-style: italic;
         display: none;
       }
+
+      /* --- Debug --- */
+      .debug-label {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        color: var(--fg-muted);
+        white-space: nowrap;
+      }
+
+      .debug-uuid {
+        display: block;
+        font-size: 0.7rem;
+        color: var(--fg-muted);
+        font-weight: 400;
+        font-family: monospace;
+        margin-top: 0.15rem;
+      }
+
+      .debug-col {
+        display: none;
+      }
+
+      body.debug-on .debug-col {
+        display: table-cell;
+      }
+
+      .status-json {
+        max-width: 350px;
+        max-height: 120px;
+        overflow: auto;
+        font-family: monospace;
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        border-radius: 0.3rem;
+        padding: 0.3rem 0.5rem;
+      }
     </style>
   </head>
   <body>
@@ -274,6 +315,13 @@
         <input type="text" id="search" placeholder="Name suchen…" autocomplete="off" />
       </div>
       <span class="result-count" id="resultCount"></span>
+      <label class="debug-label">
+        Debug
+        <label class="switch">
+          <input type="checkbox" id="debugToggle" />
+          <span class="slider"></span>
+        </label>
+      </label>
     </div>
 
     <div class="table-wrap">
@@ -286,12 +334,16 @@
             <th data-col="3">Kategorie <span class="sort-icon">&#9650;</span></th>
             <th data-col="4">Automatik <span class="sort-icon">&#9650;</span></th>
             <th data-col="5">Modus <span class="sort-icon">&#9650;</span></th>
+            <th class="debug-col no-sort">Status JSON</th>
           </tr>
         </thead>
         <tbody>
           {% for control in controls %}
-          <tr data-name="{{ control.name|lower }}">
-            <td class="name-cell">{{ control.name }}</td>
+          <tr data-name="{{ control.name|lower }}" data-uuid="{{ control.uuid }}">
+            <td class="name-cell">
+              {{ control.name }}
+              <span class="debug-uuid"></span>
+            </td>
             <td>{{ control.type or "-" }}</td>
             <td>{{ control.room or "-" }}</td>
             <td>{{ control.category or "-" }}</td>
@@ -309,6 +361,7 @@
                 <option value="notification" {% if mode_config.get(control.uuid, 'app') == 'notification' %}selected{% endif %}>Notification</option>
               </select>
             </td>
+            <td class="debug-col"><div class="status-json" data-debug-uuid="{{ control.uuid }}"></div></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -457,6 +510,72 @@
 
       loadConfiguration();
       loadModeConfiguration();
+
+      // --- Debug mode ---
+      const debugToggle = document.getElementById("debugToggle");
+      let debugActive = false;
+
+      function updateDebugDisplay() {
+        document.body.classList.toggle("debug-on", debugActive);
+
+        for (const row of tbody.rows) {
+          const uuid = row.dataset.uuid;
+          const uuidSpan = row.querySelector(".debug-uuid");
+          const autoToggle = row.querySelector(".auto-toggle");
+          const isEnabled = autoToggle && autoToggle.checked;
+
+          if (debugActive && isEnabled) {
+            uuidSpan.textContent = uuid;
+          } else {
+            uuidSpan.textContent = "";
+          }
+        }
+
+        if (debugActive) {
+          loadDebugStatus();
+        } else {
+          document.querySelectorAll(".status-json").forEach((el) => {
+            el.textContent = "";
+          });
+        }
+      }
+
+      async function loadDebugStatus() {
+        const enabledRows = Array.from(tbody.rows).filter((row) => {
+          const toggle = row.querySelector(".auto-toggle");
+          return toggle && toggle.checked;
+        });
+
+        for (const row of enabledRows) {
+          const uuid = row.dataset.uuid;
+          const cell = row.querySelector(`.status-json[data-debug-uuid="${uuid}"]`);
+          if (!cell) continue;
+          cell.textContent = "Lade...";
+          try {
+            const resp = await fetch(`/api/debug-status/${uuid}`);
+            if (!resp.ok) {
+              cell.textContent = `Fehler: ${resp.status}`;
+              continue;
+            }
+            const data = await resp.json();
+            cell.textContent = JSON.stringify(data.states, null, 2);
+          } catch (e) {
+            cell.textContent = `Fehler: ${e.message}`;
+          }
+        }
+      }
+
+      debugToggle.addEventListener("change", () => {
+        debugActive = debugToggle.checked;
+        updateDebugDisplay();
+      });
+
+      // Re-render debug UUIDs when auto-toggle changes
+      document.querySelectorAll(".auto-toggle").forEach((t) => {
+        t.addEventListener("change", () => {
+          if (debugActive) updateDebugDisplay();
+        });
+      });
     </script>
   </body>
 </html>

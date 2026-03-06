@@ -252,6 +252,30 @@ def resolve_target_topic(base: str, uuid: str) -> str:
     return f"{base}/{uuid}" if uuid else base
 
 
+def resolve_notification_topic(base: str) -> str:
+    """Derive the AWTRIX notification topic from the base/custom app topic.
+
+    AWTRIX uses ``<prefix>/custom/<app>`` for persistent apps and
+    ``<prefix>/notify`` for one-shot notifications.  This helper strips
+    the ``/custom`` segment (and any trailing placeholder) and appends
+    ``/notify`` instead.
+    """
+
+    cleaned = base.rstrip("/")
+
+    # Handle template placeholders like "prefix/custom/{uuid}"
+    if "{uuid}" in cleaned:
+        cleaned = cleaned.replace("/{uuid}", "").replace("{uuid}", "")
+        cleaned = cleaned.rstrip("/")
+
+    # Replace trailing /custom with /notify
+    if cleaned.endswith("/custom"):
+        return cleaned[: -len("/custom")] + "/notify"
+
+    # Fallback: append /notify to whatever we have
+    return cleaned + "/notify"
+
+
 def automatic_mode(
     config: Config,
     store: "AutoConfigStore",
@@ -299,14 +323,16 @@ def automatic_mode(
                     if not control:
                         continue
                     message = format_control_message(control, fetcher.resolve_state_value)
-                    topic = resolve_target_topic(config.mqtt_topic, uuid)
                     mode = store.get_mode(uuid)
 
                     if mode == "notification":
+                        topic = resolve_notification_topic(config.mqtt_topic)
                         # Nur bei Wertänderung publizieren
                         if previous_messages.get(uuid) == message:
                             continue
                         previous_messages[uuid] = message
+                    else:
+                        topic = resolve_target_topic(config.mqtt_topic, uuid)
 
                     record_local_mqtt_message(message)
                     client.publish(topic, message)
