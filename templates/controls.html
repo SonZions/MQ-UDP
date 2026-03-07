@@ -890,6 +890,9 @@
             body: JSON.stringify({ icon: iconSelectedId }),
           });
           updateIconButton(iconModalUuid, iconSelectedId);
+          // Selecting an icon implies custom app mode
+          const modeSelect = document.querySelector(`.mode-select[data-uuid="${iconModalUuid}"]`);
+          if (modeSelect) modeSelect.value = "app";
         } catch (e) {
           console.error("Icon konnte nicht gespeichert werden", e);
         }

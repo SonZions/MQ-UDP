@@ -172,7 +172,9 @@ def update_icon_config(
     store: AutoConfigStore = Depends(get_auto_config_store),
 ):
     store.set_icon(control_uuid, payload.icon)
-    return {"uuid": control_uuid, "icon": store.get_icon(control_uuid)}
+    if payload.icon:
+        store.set_mode(control_uuid, "app")
+    return {"uuid": control_uuid, "icon": store.get_icon(control_uuid), "mode": store.get_mode(control_uuid)}
 
 
 @app.get("/api/debug-status/{control_uuid}")
