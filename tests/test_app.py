@@ -356,3 +356,136 @@ def test_automatic_mode_publishes_clear_message_when_disabled(monkeypatch):
         json.dumps({"text": "Speichertemperatur: 59°"}, ensure_ascii=False),
     ) in topics_messages
     assert ("awtrix/device/custom/uuid-123", "{}") in topics_messages
+
+
+def test_automatic_mode_app_skips_unchanged_value(monkeypatch):
+    """App mode should not re-publish when the value hasn't changed."""
+    config = app.Config(
+        mqtt_broker="broker",
+        mqtt_port=1883,
+        mqtt_topic="awtrix/device/custom",
+        udp_ip="127.0.0.1",
+        udp_port=5005,
+    )
+
+    payload = {
+        "controls": {
+            "uuid-123": {
+                "name": "Temperatur",
+                "type": "InfoOnlyAnalog",
+                "room": "",
+                "cat": "",
+                "states": {"value": "state-uuid"},
+                "links": [],
+            }
+        },
+        "rooms": {},
+        "cats": {},
+    }
+
+    fetcher = MagicMock()
+    fetcher.load.return_value = payload
+    fetcher.resolve_state_value.return_value = "21°"
+    fetcher_factory = MagicMock(return_value=fetcher)
+
+    call_count = [0]
+
+    def enabled_ids_side_effect():
+        call_count[0] += 1
+        if call_count[0] <= 2:
+            return {"uuid-123"}
+        raise KeyboardInterrupt()
+
+    store = MagicMock()
+    store.enabled_ids.side_effect = enabled_ids_side_effect
+    store.get_mode.return_value = "app"
+    store.get_icon.return_value = ""
+    store.sync_from.return_value = None
+
+    client = MagicMock()
+    monkeypatch.setattr(app, "create_mqtt_client", lambda *_: client)
+
+    try:
+        app.automatic_mode(
+            config,
+            store,
+            fetcher_factory,
+            interval_override=0.0,
+        )
+    except KeyboardInterrupt:
+        pass
+
+    # Value is the same in both cycles – should publish only once
+    expected_msg = json.dumps({"text": "Temperatur: 21°"}, ensure_ascii=False)
+    topic_messages = [call.args for call in client.publish.call_args_list]
+    publish_count = topic_messages.count(("awtrix/device/custom/uuid-123", expected_msg))
+    assert publish_count == 1
+
+
+def test_automatic_mode_app_publishes_on_value_change(monkeypatch):
+    """App mode should re-publish when the value changes."""
+    config = app.Config(
+        mqtt_broker="broker",
+        mqtt_port=1883,
+        mqtt_topic="awtrix/device/custom",
+        udp_ip="127.0.0.1",
+        udp_port=5005,
+    )
+
+    payload = {
+        "controls": {
+            "uuid-123": {
+                "name": "Temperatur",
+                "type": "InfoOnlyAnalog",
+                "room": "",
+                "cat": "",
+                "states": {"value": "state-uuid"},
+                "links": [],
+            }
+        },
+        "rooms": {},
+        "cats": {},
+    }
+
+    values = iter(["21°", "22°"])
+
+    def make_fetcher():
+        f = MagicMock()
+        f.load.return_value = payload
+        f.resolve_state_value.return_value = next(values)
+        return f
+
+    call_count = [0]
+
+    def enabled_ids_side_effect():
+        call_count[0] += 1
+        if call_count[0] <= 2:
+            return {"uuid-123"}
+        raise KeyboardInterrupt()
+
+    store = MagicMock()
+    store.enabled_ids.side_effect = enabled_ids_side_effect
+    store.get_mode.return_value = "app"
+    store.get_icon.return_value = ""
+    store.sync_from.return_value = None
+
+    client = MagicMock()
+    monkeypatch.setattr(app, "create_mqtt_client", lambda *_: client)
+
+    try:
+        app.automatic_mode(
+            config,
+            store,
+            make_fetcher,
+            interval_override=0.0,
+        )
+    except KeyboardInterrupt:
+        pass
+
+    topic_messages = [call.args for call in client.publish.call_args_list]
+    msg_21 = json.dumps({"text": "Temperatur: 21°"}, ensure_ascii=False)
+    msg_22 = json.dumps({"text": "Temperatur: 22°"}, ensure_ascii=False)
+
+    # Both values should be published since they differ
+    assert ("awtrix/device/custom/uuid-123", msg_21) in topic_messages
+    assert ("awtrix/device/custom/uuid-123", msg_22) in topic_messages

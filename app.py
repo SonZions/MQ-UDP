@@ -34,7 +34,7 @@ class Config:
     udp_port: int
     mqtt_username: Optional[str] = None
     mqtt_password: Optional[str] = None
-    automatic_interval: float = 30.0
+    automatic_interval: float = 60.0
 
 
 # Variable zur Verfolgung der gesendeten Nachrichten
@@ -150,8 +150,8 @@ def parse_args(argv=None) -> Config:
     parser.add_argument(
         "--automatic-interval",
         type=float,
-        default=30.0,
-        help="Intervall in Sekunden für den Automatikmodus (Standard: 30)",
+        default=60.0,
+        help="Intervall in Sekunden für den Automatikmodus (Standard: 60)",
     )
 
     args = parser.parse_args(argv)
@@ -178,7 +178,7 @@ def config_from_env() -> Config:
     mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
     udp_ip = os.getenv("UDP_IP", "127.0.0.1")
     udp_port = int(os.getenv("UDP_PORT", "5005"))
-    automatic_interval = float(os.getenv("AUTOMATIC_INTERVAL", "30"))
+    automatic_interval = float(os.getenv("AUTOMATIC_INTERVAL", "60"))
 
     return Config(
         mqtt_broker=broker,
@@ -315,7 +315,7 @@ def automatic_mode(
 
             if not enabled:
                 previous_enabled = enabled
-                time.sleep(interval_override or config.automatic_interval)
+                time.sleep(config.automatic_interval if interval_override is None else interval_override)
                 continue
 
             try:
@@ -336,12 +336,13 @@ def automatic_mode(
                     )
                     mode = store.get_mode(uuid)
 
+                    # Nur bei Wertänderung publizieren (gilt für alle Modi)
+                    if previous_messages.get(uuid) == message:
+                        continue
+                    previous_messages[uuid] = message
+
                     if mode == "notification":
                         topic = resolve_notification_topic(config.mqtt_topic)
-                        # Nur bei Wertänderung publizieren
-                        if previous_messages.get(uuid) == message:
-                            continue
-                        previous_messages[uuid] = message
                     else:
                         topic = resolve_target_topic(config.mqtt_topic, uuid)
 
@@ -359,7 +360,7 @@ def automatic_mode(
                 fetch_failures += 1
                 print(f"Automatikmodus Fehler ({fetch_failures}): {exc}")
 
-            time.sleep(interval_override or config.automatic_interval)
+            time.sleep(config.automatic_interval if interval_override is None else interval_override)
     finally:
         client.loop_stop()
         client.disconnect()
