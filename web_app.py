@@ -44,6 +44,10 @@ class ModeConfigUpdate(BaseModel):
     mode: str
 
 
+class IconConfigUpdate(BaseModel):
+    icon: str
+
+
 @lru_cache()
 def get_fetcher() -> LoxoneDataFetcher:
     source = LoxoneDataSource.from_env()
@@ -118,6 +122,7 @@ def render_controls(
             "metadata": metadata,
             "auto_config": store.as_mapping(),
             "mode_config": store.modes_mapping(),
+            "icon_config": store.icons_mapping(),
         },
     )
 
@@ -153,6 +158,21 @@ def update_mode_config(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"uuid": control_uuid, "mode": store.get_mode(control_uuid)}
+
+
+@app.get("/api/icon-config")
+def read_icon_config(store: AutoConfigStore = Depends(get_auto_config_store)) -> Dict[str, str]:
+    return store.icons_mapping()
+
+
+@app.post("/api/icon-config/{control_uuid}")
+def update_icon_config(
+    control_uuid: str,
+    payload: IconConfigUpdate,
+    store: AutoConfigStore = Depends(get_auto_config_store),
+):
+    store.set_icon(control_uuid, payload.icon)
+    return {"uuid": control_uuid, "icon": store.get_icon(control_uuid)}
 
 
 @app.get("/api/debug-status/{control_uuid}")

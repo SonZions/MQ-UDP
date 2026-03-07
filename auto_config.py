@@ -18,6 +18,7 @@ class AutoConfigStore:
         self._lock = threading.Lock()
         self._enabled: Dict[str, bool] = {}
         self._modes: Dict[str, str] = {}
+        self._icons: Dict[str, str] = {}
         self._load()
 
     def _load(self) -> None:
@@ -45,9 +46,13 @@ class AutoConfigStore:
             }
             self._modes.update(cleaned)
 
+        icons = raw.get("icons") if isinstance(raw, dict) else None
+        if isinstance(icons, dict):
+            self._icons.update({str(k): str(v) for k, v in icons.items()})
+
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"enabled": self._enabled, "modes": self._modes}
+        payload = {"enabled": self._enabled, "modes": self._modes, "icons": self._icons}
         self.path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
     def as_mapping(self) -> Dict[str, bool]:
@@ -82,6 +87,22 @@ class AutoConfigStore:
         with self._lock:
             return dict(self._modes)
 
+    def get_icon(self, uuid: str) -> str:
+        with self._lock:
+            return self._icons.get(str(uuid), "")
+
+    def set_icon(self, uuid: str, icon: str) -> None:
+        with self._lock:
+            if icon:
+                self._icons[str(uuid)] = str(icon)
+            else:
+                self._icons.pop(str(uuid), None)
+            self._save()
+
+    def icons_mapping(self) -> Dict[str, str]:
+        with self._lock:
+            return dict(self._icons)
+
     def sync_from(self, uuids: Iterable[str]) -> None:
         """Ensure that only known UUIDs are present in the configuration."""
 
@@ -89,9 +110,12 @@ class AutoConfigStore:
             known = set(str(uuid) for uuid in uuids)
             stale_enabled = set(self._enabled) - known
             stale_modes = set(self._modes) - known
-            if stale_enabled or stale_modes:
+            stale_icons = set(self._icons) - known
+            if stale_enabled or stale_modes or stale_icons:
                 for key in stale_enabled:
                     self._enabled.pop(key, None)
                 for key in stale_modes:
                     self._modes.pop(key, None)
+                for key in stale_icons:
+                    self._icons.pop(key, None)
                 self._save()
