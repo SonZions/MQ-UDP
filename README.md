@@ -100,3 +100,69 @@ WEBAPP_HOST=0.0.0.0 WEBAPP_PORT=9000 python web_app.py
 
 Nach dem Start ist die Tabelle unter <http://HOST:PORT/> erreichbar (Standard:
 <http://localhost:8000/>).
+
+## Icons auf der AWTRIX
+
+Die Weboberfläche ermöglicht es, jedem Steuerelement ein Icon aus der
+[LaMetric Icon Gallery](https://developer.lametric.com/icons) zuzuweisen. Im
+JSON-Payload wird dann die numerische Icon-ID mitgeschickt (z. B.
+`{"text": "22.5 °C", "icon": 2056}`).
+
+**Wichtig:** Das Icon muss zusätzlich auf der AWTRIX selbst heruntergeladen
+werden. Die AWTRIX kennt nur Icons, die lokal auf ihrem Dateisystem im Ordner
+`ICONS` liegen. Wird eine Icon-ID gesendet, die auf dem Gerät nicht vorhanden
+ist, wird kein Icon angezeigt.
+
+### Icons manuell herunterladen
+
+1. Öffne die **AWTRIX-Weboberfläche** (z. B. `http://<AWTRIX_IP>/`).
+2. Wechsle zum **Icons**-Tab.
+3. Gib die gewünschte **LaMetric Icon-ID** ein (die gleiche ID, die du in
+   MQ-UDP ausgewählt hast) und klicke auf **Download**.
+4. Das Icon wird direkt von LaMetric heruntergeladen und steht sofort zur
+   Verfügung.
+
+Alternativ kannst du Icons im **Dateimanager** der AWTRIX-Weboberfläche
+manuell in den Ordner `ICONS` hochladen. Unterstützte Formate: GIF (max.
+32×8 Pixel) und JPG (max. 8×8 Pixel). Dateien können umbenannt werden –
+statt der numerischen ID (z. B. `2056.gif`) kann auch ein sprechender Name
+verwendet werden (z. B. `temperatur.gif`), der dann als `"icon": "temperatur"`
+im Payload referenziert wird.
+
+### Automatischer Download per API
+
+AWTRIX 3 bietet keine offiziell dokumentierte HTTP- oder MQTT-API zum
+automatischen Herunterladen von Icons. Der Icon-Download erfolgt aktuell
+ausschließlich über die Weboberfläche oder die AWTRIX-3-App.
+
+Als **Alternative** kann im Custom-App-Payload ein 8×8-JPG-Bild als
+Base64-String direkt im `icon`-Feld mitgeschickt werden – dafür muss das Icon
+nicht vorher auf der AWTRIX gespeichert sein:
+
+```json
+{"text": "22.5 °C", "icon": "data:image/jpeg;base64,/9j/4AAQ..."}
+```
+
+Diese Methode eignet sich vor allem für dynamische oder einmalige Icons,
+ist aber auf statische 8×8-JPGs beschränkt (keine Animationen).
+
+## Automatische Aktualisierung der Statuswerte
+
+Wenn der Automatikmodus aktiv ist und mindestens ein Steuerelement aktiviert
+wurde, werden die Werte **regelmäßig** von Loxone abgerufen und auf dem
+MQTT-Topic veröffentlicht:
+
+1. In jedem Intervall (konfigurierbar über `AUTOMATIC_INTERVAL`, Standard:
+   60 Sekunden) wird die `LoxAPP3.json` vom Miniserver geladen.
+2. Für jedes aktivierte Steuerelement werden die zugehörigen Status-UUIDs
+   einzeln über die Loxone-Status-API abgefragt
+   (`http://<hostname>/jdev/sps/io/<uuid>/state`).
+3. Aus den Ergebnissen wird ein AWTRIX-kompatibles JSON-Payload erzeugt und
+   per MQTT veröffentlicht.
+4. Unveränderte Werte werden nur im App-Modus nach 60 Sekunden erneut
+   gesendet; im Notification-Modus werden Duplikate unterdrückt.
+
+Die Aktualisierung läuft vollständig automatisch im Hintergrund – es ist
+kein manuelles Eingreifen nötig. Voraussetzung ist, dass die
+Loxone-Umgebungsvariablen (`LOXONE_HOSTNAME` oder `LOXONE_URL` sowie ggf.
+`LOXONE_USERNAME`/`LOXONE_PASSWORD`) korrekt gesetzt sind.
