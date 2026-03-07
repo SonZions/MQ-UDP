@@ -489,3 +489,71 @@ def test_automatic_mode_app_publishes_on_value_change(monkeypatch):
     # Both values should be published since they differ
     assert ("awtrix/device/custom/uuid-123", msg_21) in topic_messages
     assert ("awtrix/device/custom/uuid-123", msg_22) in topic_messages
+
+
+def test_automatic_mode_app_refreshes_unchanged_value_every_minute(monkeypatch):
+    """App mode should refresh unchanged values at least once per minute."""
+    config = app.Config(
+        mqtt_broker="broker",
+        mqtt_port=1883,
+        mqtt_topic="awtrix/device/custom",
+        udp_ip="127.0.0.1",
+        udp_port=5005,
+    )
+
+    payload = {
+        "controls": {
+            "uuid-123": {
+                "name": "Temperatur",
+                "type": "InfoOnlyAnalog",
+                "room": "",
+                "cat": "",
+                "states": {"value": "state-uuid"},
+                "links": [],
+            }
+        },
+        "rooms": {},
+        "cats": {},
+    }
+
+    fetcher = MagicMock()
+    fetcher.load.return_value = payload
+    fetcher.resolve_state_value.return_value = "21°"
+    fetcher_factory = MagicMock(return_value=fetcher)
+
+    call_count = [0]
+
+    def enabled_ids_side_effect():
+        call_count[0] += 1
+        if call_count[0] <= 2:
+            return {"uuid-123"}
+        raise KeyboardInterrupt()
+
+    store = MagicMock()
+    store.enabled_ids.side_effect = enabled_ids_side_effect
+    store.get_mode.return_value = "app"
+    store.get_icon.return_value = ""
+    store.sync_from.return_value = None
+
+    client = MagicMock()
+    monkeypatch.setattr(app, "create_mqtt_client", lambda *_: client)
+
+    timestamps = iter([100.0, 161.0])
+    monkeypatch.setattr(app.time, "monotonic", lambda: next(timestamps))
+
+    try:
+        app.automatic_mode(
+            config,
+            store,
+            fetcher_factory,
+            interval_override=0.0,
+        )
+    except KeyboardInterrupt:
+        pass
+
+    expected_msg = json.dumps({"text": "Temperatur: 21°"}, ensure_ascii=False)
+    topic_messages = [call.args for call in client.publish.call_args_list]
+    publish_count = topic_messages.count(("awtrix/device/custom/uuid-123", expected_msg))
+
+    # Same value should still be refreshed once 60s have elapsed
+    assert publish_count == 2

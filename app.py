@@ -299,11 +299,13 @@ def automatic_mode(
 ) -> None:
     """Publish selected control values to MQTT based on the stored configuration."""
 
+    app_refresh_interval_seconds = 60.0
     client = create_mqtt_client(config)
     client.loop_start()
     fetch_failures = 0
     previous_enabled: Set[str] = set()
     previous_messages: Dict[str, str] = {}
+    last_app_publish_at: Dict[str, float] = {}
     try:
         while True:
             enabled = store.enabled_ids()
@@ -315,6 +317,7 @@ def automatic_mode(
                     record_local_mqtt_message(empty_payload)
                     client.publish(topic, empty_payload)
                     previous_messages.pop(uuid, None)
+                    last_app_publish_at.pop(uuid, None)
                     logger.info(
                         "Automatikmodus setzte Nachricht zurück – Topic: %s", topic
                     )
@@ -341,11 +344,21 @@ def automatic_mode(
                         control, fetcher.resolve_state_value, icon=icon or None,
                     )
                     mode = store.get_mode(uuid)
+                    now = time.monotonic()
 
-                    # Nur bei Wertänderung publizieren (gilt für alle Modi)
-                    if previous_messages.get(uuid) == message:
+                    should_skip_due_to_no_change = previous_messages.get(uuid) == message
+                    if mode == "app":
+                        should_refresh = (
+                            now - last_app_publish_at.get(uuid, float("-inf"))
+                        ) >= app_refresh_interval_seconds
+                        should_skip_due_to_no_change = should_skip_due_to_no_change and not should_refresh
+
+                    if should_skip_due_to_no_change:
                         continue
+
                     previous_messages[uuid] = message
+                    if mode == "app":
+                        last_app_publish_at[uuid] = now
 
                     if mode == "notification":
                         topic = resolve_notification_topic(config.mqtt_topic)
