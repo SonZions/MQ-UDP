@@ -834,7 +834,8 @@
             iconGrid.innerHTML = '<div class="icon-loading">Fehler beim Laden der Icons</div>';
             return;
           }
-          const icons = await resp.json();
+          const data = await resp.json();
+          const icons = Array.isArray(data) ? data : (data.icons || []);
           if (!icons || icons.length === 0) {
             iconGrid.innerHTML = '<div class="icon-loading">Keine Icons gefunden</div>';
             return;
