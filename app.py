@@ -232,7 +232,10 @@ def format_control_message(
     label = control.name.strip()
     value_text = " ".join(filter(None, values)).strip()
 
-    if label and value_text:
+    # Wenn ein Icon gesetzt ist, ersetzt es den Namen – nur den Wert anzeigen.
+    if icon and value_text:
+        text = value_text
+    elif label and value_text:
         text = f"{label}: {value_text}".strip()
     elif label:
         text = label
