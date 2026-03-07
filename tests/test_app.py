@@ -119,6 +119,71 @@ def test_format_control_message_uses_state_resolver():
     assert json.loads(message) == {"text": "Sensor: 43"}
 
 
+def test_format_control_message_skips_error_state():
+    """Error states should not appear in the formatted message."""
+    control = ControlRow(
+        uuid="uuid-wind",
+        name="Windgeschwindigkeit",
+        type="InfoOnlyAnalog",
+        room="",
+        category="",
+        details=tuple(),
+        states=(
+            ("error", "err-uuid-1234-5678-abcdefabcdef"),
+            ("value", "val-uuid-1234-5678-abcdefabcdef"),
+        ),
+        links=tuple(),
+    )
+
+    def resolver(candidate: str) -> str:
+        if candidate.startswith("val-"):
+            return "0.0km/h"
+        return "Fehler bei Statusabfrage (url): error"
+
+    message = app.format_control_message(control, resolver)
+    parsed = json.loads(message)
+
+    assert parsed == {"text": "Windgeschwindigkeit: 0.0km/h"}
+    assert "Fehler" not in parsed["text"]
+
+
+def test_format_control_message_with_icon():
+    control = ControlRow(
+        uuid="uuid-1",
+        name="Temperatur",
+        type="InfoOnlyAnalog",
+        room="",
+        category="",
+        details=tuple(),
+        states=(("value", "state-uuid"),),
+        links=tuple(),
+    )
+
+    message = app.format_control_message(control, lambda _: "21.5°C", icon="2056")
+    parsed = json.loads(message)
+
+    assert parsed == {"text": "Temperatur: 21.5°C", "icon": "2056"}
+
+
+def test_format_control_message_without_icon():
+    control = ControlRow(
+        uuid="uuid-1",
+        name="Temperatur",
+        type="InfoOnlyAnalog",
+        room="",
+        category="",
+        details=tuple(),
+        states=(("value", "state-uuid"),),
+        links=tuple(),
+    )
+
+    message = app.format_control_message(control, lambda _: "21.5°C")
+    parsed = json.loads(message)
+
+    assert parsed == {"text": "Temperatur: 21.5°C"}
+    assert "icon" not in parsed
+
+
 def test_format_control_message_falls_back_to_details():
     control = ControlRow(
         uuid="uuid-2",
@@ -205,6 +270,7 @@ def test_automatic_mode_notification_publishes_to_notify_topic(monkeypatch):
         KeyboardInterrupt(),
     ]
     store.get_mode.return_value = "notification"
+    store.get_icon.return_value = ""
     store.sync_from.return_value = None
 
     client = MagicMock()
@@ -267,6 +333,7 @@ def test_automatic_mode_publishes_clear_message_when_disabled(monkeypatch):
         KeyboardInterrupt(),
     ]
     store.get_mode.return_value = "app"
+    store.get_icon.return_value = ""
     store.sync_from.return_value = None
 
     client = MagicMock()

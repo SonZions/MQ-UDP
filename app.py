@@ -195,6 +195,8 @@ def config_from_env() -> Config:
 def format_control_message(
     control: ControlRow,
     state_resolver: Optional[Callable[[str], Optional[str]]] = None,
+    *,
+    icon: Optional[str] = None,
 ) -> str:
     """Render an AWTRIX compatible payload for a control."""
 
@@ -202,7 +204,11 @@ def format_control_message(
     if control.states:
         resolved_values = []
         fallback_values = []
+        # Loxone "error" states contain error flags, not display values.
+        _SKIP_STATE_KEYS = {"error"}
         for _key, raw_value in control.states:
+            if _key in _SKIP_STATE_KEYS:
+                continue
             resolved = state_resolver(raw_value) if state_resolver else None
             if resolved:
                 resolved_values.append(str(resolved).strip())
@@ -233,7 +239,9 @@ def format_control_message(
     else:
         text = value_text or "Keine Daten verfügbar"
 
-    payload = {"text": text}
+    payload: Dict[str, object] = {"text": text}
+    if icon:
+        payload["icon"] = icon
     return json.dumps(payload, ensure_ascii=False)
 
 
@@ -322,7 +330,10 @@ def automatic_mode(
                     control = controls.get(uuid)
                     if not control:
                         continue
-                    message = format_control_message(control, fetcher.resolve_state_value)
+                    icon = store.get_icon(uuid)
+                    message = format_control_message(
+                        control, fetcher.resolve_state_value, icon=icon or None,
+                    )
                     mode = store.get_mode(uuid)
 
                     if mode == "notification":
