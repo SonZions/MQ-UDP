@@ -73,7 +73,7 @@ def start_bridge() -> None:
         return
 
     store = get_auto_config_store()
-    fetcher = get_fetcher()
+    source = LoxoneDataSource.from_env()
 
     publisher_client = create_mqtt_client(config)
     publisher_client.loop_start()
@@ -86,7 +86,7 @@ def start_bridge() -> None:
     ).start()
     threading.Thread(
         target=automatic_mode,
-        args=(config, store, lambda: fetcher),
+        args=(config, store, lambda: LoxoneDataFetcher(source=source)),
         daemon=True,
     ).start()
 
