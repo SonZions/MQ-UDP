@@ -244,7 +244,10 @@ def format_control_message(
 
     payload: Dict[str, object] = {"text": text}
     if icon:
-        payload["icon"] = icon
+        try:
+            payload["icon"] = int(icon)
+        except (ValueError, TypeError):
+            payload["icon"] = icon
     return json.dumps(payload, ensure_ascii=False)
 
 

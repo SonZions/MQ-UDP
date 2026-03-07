@@ -162,7 +162,7 @@ def test_format_control_message_with_icon():
     message = app.format_control_message(control, lambda _: "21.5°C", icon="2056")
     parsed = json.loads(message)
 
-    assert parsed == {"text": "21.5°C", "icon": "2056"}
+    assert parsed == {"text": "21.5°C", "icon": 2056}
 
 
 def test_format_control_message_without_icon():
