@@ -79,7 +79,8 @@ def create_mqtt_client(config: Config) -> mqtt.Client:
     client = mqtt.Client()
     if config.mqtt_username or config.mqtt_password:
         client.username_pw_set(config.mqtt_username, config.mqtt_password)
-    client.connect(config.mqtt_broker, config.mqtt_port, 60)
+    client.reconnect_delay_set(min_delay=1, max_delay=60)
+    client.connect_async(config.mqtt_broker, config.mqtt_port, 60)
     return client
 
 
