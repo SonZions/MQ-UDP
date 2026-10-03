@@ -1,0 +1,30 @@
+name: Deploy AWStates to VPS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awstates-vps-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt pytest
+      - run: python -m pytest -q
+
+  deploy:
+    needs: check
+    runs-on: [self-hosted, Linux, X64, my-vps, mq-udp]
+    timeout-minutes: 30
+    steps:
+      - name: Deploy approved main commit on VPS
+        run: sudo -n /usr/local/sbin/awstates-vps-deploy "$GITHUB_SHA"

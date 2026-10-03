@@ -1,4 +1,4 @@
-# Dockerfile für den Einsatz auf einem Raspberry Pi (armhf/arm64)
+# Multi-architecture image for the VPS and Raspberry Pi
 FROM python:3.11-slim
 
 # Arbeitsverzeichnis setzen
