@@ -36,6 +36,11 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 AUTO_CONFIG_PATH = Path(os.getenv("AUTO_CONFIG_PATH", "auto_config.json"))
 
 
+@app.get("/healthz")
+def healthz() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
 class AutoConfigUpdate(BaseModel):
     enabled: bool
 
